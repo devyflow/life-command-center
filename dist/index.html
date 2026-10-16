@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#141717" />
+  <meta name="description" content="A calm command center for everything you need to do." />
+  <title>Life Command Center</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="noise"></div>
+  <aside class="sidebar">
+    <a class="brand" href="#" aria-label="Life Command Center home">
+      <span class="brand-mark">L</span>
+      <span>Life<br>Command</span>
+    </a>
+
+    <nav class="main-nav" aria-label="Main navigation">
+      <button class="nav-item active" data-view="today">
+        <span class="nav-icon">⌁</span><span>Today</span><span class="nav-count" id="todayCount">4</span>
+      </button>
+      <button class="nav-item" data-view="inbox">
+        <span class="nav-icon">↓</span><span>Inbox</span><span class="nav-count" id="inboxCount">3</span>
+      </button>
+      <button class="nav-item" data-view="all">
+        <span class="nav-icon">☷</span><span>All tasks</span>
+      </button>
+      <button class="nav-item" data-view="waiting">
+        <span class="nav-icon">◴</span><span>Waiting</span><span class="nav-count" id="waitingCount">1</span>
+      </button>
+    </nav>
+
+    <div class="sidebar-section">
+      <p class="eyebrow">AREAS</p>
+      <button class="area-item" data-area="Work"><span class="area-dot work"></span>Work <span id="workCount">3</span></button>
+      <button class="area-item" data-area="Personal"><span class="area-dot personal"></span>Personal <span id="personalCount">3</span></button>
+      <button class="area-item" data-area="Growth"><span class="area-dot growth"></span>Growth <span id="growthCount">2</span></button>
+    </div>
+
+    <div class="sidebar-footer">
+      <div class="avatar">A</div>
+      <div><strong>Your space</strong><small>Prototype · local data</small></div>
+      <button class="icon-btn" id="resetBtn" title="Reset demo data">↻</button>
+    </div>
+  </aside>
+
+  <main>
+    <header class="topbar">
+      <button class="mobile-menu" id="mobileMenu" aria-label="Open menu">☰</button>
+      <button class="capture-bar" id="openCapture">
+        <span class="plus">+</span>
+        <span>Capture anything...</span>
+        <kbd>C</kbd>
+      </button>
+      <div class="top-actions">
+        <button class="icon-btn" id="focusToggle" title="Focus mode">◎</button>
+        <div class="date-badge"><span id="dateDay">16</span><small id="dateMonth">OCT</small></div>
+      </div>
+    </header>
+
+    <div class="content" id="content">
+      <section class="hero-row">
+        <div>
+          <p class="overline" id="overline">FRIDAY · 16 OCTOBER</p>
+          <h1 id="viewTitle">Good morning.<br><em>What matters today?</em></h1>
+        </div>
+        <div class="capacity-card" id="capacityCard">
+          <div class="capacity-ring" id="capacityRing"><span id="capacityPercent">72%</span></div>
+          <div>
+            <p>Today’s load</p>
+            <strong id="capacityText">3h 35m of 5h</strong>
+            <small id="capacityHint">Comfortably achievable</small>
+          </div>
+        </div>
+      </section>
+
+      <section class="signal-strip" id="signalStrip">
+        <div class="signal-mark">!</div>
+        <div>
+          <p class="eyebrow">NEEDS A DECISION</p>
+          <strong id="stuckTitle">Update portfolio website</strong>
+          <span id="stuckMeta">Postponed 4 times · last touched 9 days ago</span>
+        </div>
+        <button id="rescueBtn">Unstick it <span>→</span></button>
+      </section>
+
+      <section class="task-section">
+        <div class="section-heading">
+          <div><span class="section-index">01</span><h2 id="primaryHeading">Committed today</h2></div>
+          <button class="text-btn" id="sortBtn">Sort by energy ↕</button>
+        </div>
+        <div class="task-list" id="taskList"></div>
+      </section>
+
+      <section class="lower-grid" id="lowerGrid">
+        <div class="task-section later-section">
+          <div class="section-heading compact">
+            <div><span class="section-index">02</span><h2>Next up</h2></div>
+            <span class="muted" id="laterCount"></span>
+          </div>
+          <div class="task-list compact-list" id="laterList"></div>
+        </div>
+
+        <aside class="pulse-card">
+          <div class="pulse-top">
+            <span class="eyebrow">WEEKLY PULSE</span>
+            <span class="trend">↗ 12%</span>
+          </div>
+          <div class="pulse-score"><strong id="doneCount">12</strong><span>things<br>finished</span></div>
+          <div class="bars" aria-label="Tasks completed per weekday">
+            <div><i style="height:42%"></i><span>M</span></div>
+            <div><i style="height:72%"></i><span>T</span></div>
+            <div><i style="height:56%"></i><span>W</span></div>
+            <div><i style="height:90%"></i><span>T</span></div>
+            <div><i class="today-bar" style="height:64%"></i><span>F</span></div>
+            <div><i style="height:18%"></i><span>S</span></div>
+            <div><i style="height:10%"></i><span>S</span></div>
+          </div>
+          <p class="pulse-note">You finish more when your day stays under 5 hours.</p>
+        </aside>
+      </section>
+    </div>
+  </main>
+
+  <nav class="mobile-nav" aria-label="Mobile navigation">
+    <button class="active" data-view="today"><span>⌁</span>Today</button>
+    <button data-view="inbox"><span>↓</span>Inbox</button>
+    <button class="mobile-add" id="mobileAdd">+</button>
+    <button data-view="all"><span>☷</span>All</button>
+    <button data-view="waiting"><span>◴</span>Waiting</button>
+  </nav>
+
+  <div class="modal-backdrop" id="captureModal" aria-hidden="true">
+    <div class="capture-modal" role="dialog" aria-modal="true" aria-labelledby="captureTitle">
+      <div class="modal-head">
+        <div><span class="eyebrow">QUICK CAPTURE</span><h2 id="captureTitle">Get it out of your head.</h2></div>
+        <button class="close-btn" id="closeCapture" aria-label="Close">×</button>
+      </div>
+      <form id="taskForm">
+        <textarea id="taskInput" rows="3" placeholder="What needs your attention?" required></textarea>
+        <div class="form-grid">
+          <label>Area<select id="taskArea"><option>Work</option><option>Personal</option><option>Growth</option></select></label>
+          <label>Time<select id="taskDuration"><option value="15">15 min</option><option value="30" selected>30 min</option><option value="45">45 min</option><option value="60">1 hour</option><option value="90">1.5 hours</option></select></label>
+          <label>Energy<select id="taskEnergy"><option value="low">Low</option><option value="medium" selected>Medium</option><option value="high">High</option></select></label>
+          <label>When<select id="taskWhen"><option value="inbox">Decide later</option><option value="today">Today</option><option value="next">Next up</option></select></label>
+        </div>
+        <div class="form-footer"><span>Press <kbd>Ctrl</kbd> + <kbd>Enter</kbd></span><button type="submit">Capture task <span>→</span></button></div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="rescueModal" aria-hidden="true">
+    <div class="capture-modal rescue-modal" role="dialog" aria-modal="true" aria-labelledby="rescueTitle">
+      <div class="modal-head"><div><span class="eyebrow">STUCK TASK RESCUE</span><h2 id="rescueTitle">Why isn’t this moving?</h2></div><button class="close-btn" id="closeRescue">×</button></div>
+      <p class="rescue-task" id="rescueTaskName">Update portfolio website</p>
+      <div class="rescue-options">
+        <button data-rescue="split"><span>↳</span><div><strong>It feels too big</strong><small>Replace it with a 15-minute first step</small></div></button>
+        <button data-rescue="waiting"><span>◴</span><div><strong>I’m waiting on someone</strong><small>Move it to Waiting and choose a follow-up</small></div></button>
+        <button data-rescue="later"><span>→</span><div><strong>It matters, just not now</strong><small>Move it out of today without guilt</small></div></button>
+        <button data-rescue="drop"><span>×</span><div><strong>It no longer matters</strong><small>Remove the commitment</small></div></button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"><span>✓</span><p>Task captured</p></div>
+  <script src="app.js"></script>
+</body>
+</html>
