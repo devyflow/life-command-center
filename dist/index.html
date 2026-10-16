@@ -1,214 +1,101 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="theme-color" content="#141717" />
-  <meta name="description" content="A calm command center for everything you need to do." />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#111514">
+  <meta name="description" content="Life Command Center — plan your time, protect your attention and finish what matters.">
   <title>Life Command Center</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&family=Newsreader:ital,opsz,wght@1,6..72,500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <div class="noise"></div>
-  <aside class="sidebar">
-    <a class="brand" href="#" aria-label="Life Command Center home">
-      <span class="brand-mark">L</span>
-      <span>Life<br>Command</span>
-    </a>
-
-    <nav class="main-nav" aria-label="Main navigation">
-      <button class="nav-item active" data-view="today">
-        <span class="nav-icon">⌁</span><span>Today</span><span class="nav-count" id="todayCount">4</span>
-      </button>
-      <button class="nav-item" data-view="inbox">
-        <span class="nav-icon">↓</span><span>Inbox</span><span class="nav-count" id="inboxCount">3</span>
-      </button>
-      <button class="nav-item" data-view="planner">
-        <span class="nav-icon">◇</span><span>Flex planner</span><span class="nav-count" id="plannerCount">1</span>
-      </button>
-      <button class="nav-item" data-view="all">
-        <span class="nav-icon">☷</span><span>All tasks</span>
-      </button>
-      <button class="nav-item" data-view="waiting">
-        <span class="nav-icon">◴</span><span>Waiting</span><span class="nav-count" id="waitingCount">1</span>
-      </button>
+  <div class="grain" aria-hidden="true"></div>
+  <aside class="sidebar" id="sidebar">
+    <a class="brand" href="#" data-view="today" aria-label="Life Command Center home"><span class="brand-mark">L</span><span>Life<br>Command</span></a>
+    <nav class="primary-nav" aria-label="Main navigation">
+      <button class="nav-item active" data-view="today"><span>⌁</span><b>Today</b><i id="todayCount">4</i></button>
+      <button class="nav-item" data-view="planner"><span>▦</span><b>Hour planner</b><i id="plannerCount">5</i></button>
+      <button class="nav-item" data-view="inbox"><span>↓</span><b>Inbox</b><i id="inboxCount">3</i></button>
+      <button class="nav-item" data-view="requests"><span>↙</span><b>Time requests</b><i id="requestCount">2</i></button>
+      <button class="nav-item" data-view="share"><span>◎</span><b>Share time</b></button>
+      <button class="nav-item" data-view="insights"><span>↗</span><b>Insights</b></button>
     </nav>
-
-    <div class="sidebar-section spaces">
-      <p class="eyebrow">SPACES</p>
-      <button class="area-item" data-area="Career"><span class="area-dot work"></span>Career <span id="careerCount">5</span></button>
-      <div class="subspace-list">
-        <button data-subcategory="College">↳ College <span id="collegeCount">2</span></button>
-        <button data-subcategory="DSA">↳ DSA <span id="dsaCount">1</span></button>
-        <button data-subcategory="Meetings">↳ Meetings <span id="meetingsCount">1</span></button>
-      </div>
-      <button class="area-item" data-area="Personal"><span class="area-dot personal"></span>Personal <span id="personalCount">3</span></button>
-      <button class="area-item" data-area="Growth"><span class="area-dot growth"></span>Growth <span id="growthCount">2</span></button>
+    <div class="space-tree">
+      <p class="eyebrow">MY LIFE</p>
+      <button class="space-row" data-space="Career"><span class="space-dot coral"></span><b>Career</b><i id="careerCount">0</i></button>
+      <div class="tree-children"><button data-category="College">College</button><button data-category="DSA">DSA</button><button data-category="Meetings">Meetings</button></div>
+      <button class="space-row" data-space="Personal"><span class="space-dot blue"></span><b>Personal</b><i id="personalCount">0</i></button>
+      <div class="tree-children"><button data-category="Health">Health</button><button data-category="Home">Home</button></div>
+      <button class="space-row" data-space="Growth"><span class="space-dot lime"></span><b>Growth</b><i id="growthCount">0</i></button>
     </div>
-
-    <div class="sidebar-footer">
-      <div class="avatar">A</div>
-      <div><strong>Your space</strong><small>Prototype · local data</small></div>
-      <button class="icon-btn" id="resetBtn" title="Reset demo data">↻</button>
-    </div>
+    <div class="sidebar-foot"><div class="avatar">A</div><div><b>Your command center</b><small>Saved on this device</small></div><button class="bare" id="resetBtn" title="Reset demo">↻</button></div>
   </aside>
 
   <main>
     <header class="topbar">
-      <button class="mobile-menu" id="mobileMenu" aria-label="Open menu">☰</button>
-      <button class="capture-bar" id="openCapture">
-        <span class="plus">+</span>
-        <span>Capture anything...</span>
-        <kbd>C</kbd>
-      </button>
-      <div class="top-actions">
-        <button class="icon-btn" id="focusToggle" title="Focus mode">◎</button>
-        <div class="date-badge"><span id="dateDay">16</span><small id="dateMonth">OCT</small></div>
-      </div>
+      <button class="menu-btn" id="menuBtn" aria-label="Open menu">☰</button>
+      <button class="capture-trigger" id="captureTrigger"><span>+</span><b>Capture anything…</b><kbd>C</kbd></button>
+      <div class="top-actions"><button class="focus-btn" id="focusBtn" title="Enter focus mode">◎ <span>Focus</span></button><div class="today-date"><strong id="dateDay">17</strong><span id="dateMonth">OCT</span></div></div>
     </header>
-
-    <div class="content" id="content">
-      <section class="hero-row">
-        <div>
-          <p class="overline" id="overline">FRIDAY · 16 OCTOBER</p>
-          <h1 id="viewTitle">Good morning.<br><em>What matters today?</em></h1>
-        </div>
-        <div class="hero-insights">
-          <div class="capacity-card" id="capacityCard">
-            <div class="capacity-ring" id="capacityRing"><span id="capacityPercent">72%</span></div>
-            <div>
-              <p>Today’s load</p>
-              <strong id="capacityText">3h 35m of 5h</strong>
-              <small id="capacityHint">Comfortably achievable</small>
-            </div>
-          </div>
-          <button class="reward-card" id="rewardCard" title="Open rewards">
-            <span class="streak-flame">◆</span>
-            <span><small>PRODUCTIVE STREAK</small><strong><b id="streakDays">4</b> days</strong></span>
-            <span class="xp-pill"><b id="xpCount">280</b> XP</span>
-          </button>
-        </div>
-      </section>
-
-      <section class="signal-strip" id="signalStrip">
-        <div class="signal-mark">!</div>
-        <div>
-          <p class="eyebrow">NEEDS A DECISION</p>
-          <strong id="stuckTitle">Update portfolio website</strong>
-          <span id="stuckMeta">Postponed 4 times · last touched 9 days ago</span>
-        </div>
-        <button id="rescueBtn">Unstick it <span>→</span></button>
-      </section>
-
-      <section class="task-section">
-        <div class="section-heading">
-          <div><span class="section-index">01</span><h2 id="primaryHeading">Committed today</h2></div>
-          <button class="text-btn" id="sortBtn">Sort by energy ↕</button>
-        </div>
-        <div class="task-list" id="taskList"></div>
-      </section>
-
-      <section class="lower-grid" id="lowerGrid">
-        <div class="task-section later-section">
-          <div class="section-heading compact">
-            <div><span class="section-index">02</span><h2>Next up</h2></div>
-            <span class="muted" id="laterCount"></span>
-          </div>
-          <div class="task-list compact-list" id="laterList"></div>
-        </div>
-
-        <aside class="pulse-card">
-          <div class="pulse-top">
-            <span class="eyebrow">WEEKLY PULSE</span>
-            <span class="trend">↗ 12%</span>
-          </div>
-          <div class="pulse-score"><strong id="doneCount">12</strong><span>things<br>finished</span></div>
-          <div class="bars" aria-label="Tasks completed per weekday">
-            <div><i style="height:42%"></i><span>M</span></div>
-            <div><i style="height:72%"></i><span>T</span></div>
-            <div><i style="height:56%"></i><span>W</span></div>
-            <div><i style="height:90%"></i><span>T</span></div>
-            <div><i class="today-bar" style="height:64%"></i><span>F</span></div>
-            <div><i style="height:18%"></i><span>S</span></div>
-            <div><i style="height:10%"></i><span>S</span></div>
-          </div>
-          <p class="pulse-note">You finish more when your day stays under 5 hours.</p>
-        </aside>
-      </section>
-    </div>
+    <div id="app" class="app-shell" aria-live="polite"></div>
   </main>
 
   <nav class="mobile-nav" aria-label="Mobile navigation">
-    <button class="active" data-view="today"><span>⌁</span>Today</button>
-    <button data-view="inbox"><span>↓</span>Inbox</button>
-    <button class="mobile-add" id="mobileAdd">+</button>
-    <button data-view="planner"><span>◇</span>Plan</button>
-    <button data-view="waiting"><span>◴</span>Waiting</button>
+    <button class="active" data-view="today"><span>⌁</span>Today</button><button data-view="planner"><span>▦</span>Plan</button><button class="mobile-add" id="mobileAdd" aria-label="Add task">+</button><button data-view="requests"><span>↙</span>Requests</button><button data-view="share"><span>◎</span>Share</button>
   </nav>
 
-  <div class="modal-backdrop" id="captureModal" aria-hidden="true">
-    <div class="capture-modal" role="dialog" aria-modal="true" aria-labelledby="captureTitle">
-      <div class="modal-head">
-        <div><span class="eyebrow">QUICK CAPTURE</span><h2 id="captureTitle">Get it out of your head.</h2></div>
-        <button class="close-btn" id="closeCapture" aria-label="Close">×</button>
-      </div>
+  <div class="modal-layer" id="taskModal" aria-hidden="true">
+    <div class="modal task-modal" role="dialog" aria-modal="true" aria-labelledby="taskModalTitle">
+      <header class="modal-head"><div><p class="eyebrow">QUICK CAPTURE</p><h2 id="taskModalTitle">Give it a place.</h2></div><button data-close="taskModal">×</button></header>
       <form id="taskForm">
-        <textarea id="taskInput" rows="3" placeholder="What needs your attention?" required></textarea>
+        <label class="title-field"><span>What needs your attention?</span><textarea id="taskTitle" rows="2" required placeholder="Prepare DSA practice set"></textarea></label>
         <div class="form-grid">
-          <label>Space<select id="taskArea"><option>Career</option><option>Personal</option><option>Growth</option></select></label>
-          <label>Subcategory<select id="taskSubcategory"><option>College</option><option>DSA</option><option>Meetings</option><option>Projects</option></select></label>
-          <label>Time<select id="taskDuration"><option value="15">15 min</option><option value="30" selected>30 min</option><option value="45">45 min</option><option value="60">1 hour</option><option value="90">1.5 hours</option></select></label>
+          <label>Life area<select id="taskArea"><option>Career</option><option>Personal</option><option>Growth</option></select></label>
+          <label>Category<select id="taskCategory"><option>College</option><option>DSA</option><option>Meetings</option><option>Projects</option></select></label>
+          <label>Duration<select id="taskDuration"><option value="15">15 minutes</option><option value="30">30 minutes</option><option value="45">45 minutes</option><option value="60" selected>1 hour</option><option value="90">1.5 hours</option><option value="120">2 hours</option></select></label>
           <label>Energy<select id="taskEnergy"><option value="low">Low</option><option value="medium" selected>Medium</option><option value="high">High</option></select></label>
-          <label>When<select id="taskWhen"><option value="inbox">Decide later</option><option value="today">Today</option><option value="next">Next up</option><option value="flex">Flexible day</option></select></label>
-          <label>Date<input type="date" id="taskDate"></label>
-          <label>Earliest time<input type="time" id="windowStart" value="10:00"></label>
-          <label>Latest time<input type="time" id="windowEnd" value="22:00"></label>
+          <label>Plan type<select id="taskPlan"><option value="inbox">Decide later</option><option value="today">Today, flexible time</option><option value="fixed">Fixed time</option><option value="window">Flexible window</option></select></label>
+          <label>Date<input id="taskDate" type="date"></label>
+          <label>Earliest time<input id="taskStart" type="time" value="10:00"></label>
+          <label>Latest time<input id="taskEnd" type="time" value="18:00"></label>
+          <label>Decide exact time by<input id="decideBy" type="date"></label>
+          <label>First tiny step<input id="taskNext" type="text" placeholder="Open notes and outline"></label>
         </div>
-        <label class="timer-choice"><input type="checkbox" id="taskTimer"> <span>Add a focus timer for this task</span></label>
-        <div class="form-footer"><span>Press <kbd>Ctrl</kbd> + <kbd>Enter</kbd></span><button type="submit">Capture task <span>→</span></button></div>
+        <div class="choice-row"><label><input id="taskTimer" type="checkbox" checked> Add focus timer</label><label><input id="taskPublish" type="checkbox"> Show on shared calendar</label><label><input id="taskCalendar" type="checkbox"> Add to calendar when scheduled</label></div>
+        <footer class="modal-actions"><span>Nothing has to be perfect yet.</span><button class="primary" type="submit">Capture task →</button></footer>
       </form>
     </div>
   </div>
 
-  <div class="modal-backdrop" id="rescueModal" aria-hidden="true">
-    <div class="capture-modal rescue-modal" role="dialog" aria-modal="true" aria-labelledby="rescueTitle">
-      <div class="modal-head"><div><span class="eyebrow">STUCK TASK RESCUE</span><h2 id="rescueTitle">Why isn’t this moving?</h2></div><button class="close-btn" id="closeRescue">×</button></div>
-      <p class="rescue-task" id="rescueTaskName">Update portfolio website</p>
-      <div class="rescue-options">
-        <button data-rescue="split"><span>↳</span><div><strong>It feels too big</strong><small>Replace it with a 15-minute first step</small></div></button>
-        <button data-rescue="waiting"><span>◴</span><div><strong>I’m waiting on someone</strong><small>Move it to Waiting and choose a follow-up</small></div></button>
-        <button data-rescue="later"><span>→</span><div><strong>It matters, just not now</strong><small>Move it out of today without guilt</small></div></button>
-        <button data-rescue="drop"><span>×</span><div><strong>It no longer matters</strong><small>Remove the commitment</small></div></button>
-      </div>
+  <div class="modal-layer" id="freeModal" aria-hidden="true">
+    <div class="modal small-modal" role="dialog" aria-modal="true">
+      <header class="modal-head"><div><p class="eyebrow">AVAILABILITY</p><h2>Mark free time.</h2></div><button data-close="freeModal">×</button></header>
+      <form id="freeForm" class="stack-form">
+        <label>Date<input id="freeDate" type="date" required></label>
+        <div class="two-col"><label>From<input id="freeStart" type="time" value="16:00" required></label><label>To<input id="freeEnd" type="time" value="18:00" required></label></div>
+        <label>Public label<input id="freeLabel" value="Open for a focused conversation"></label>
+        <label>Maximum request<select id="freeMax"><option value="30">30 minutes</option><option value="45">45 minutes</option><option value="60" selected>1 hour</option><option value="120">2 hours</option></select></label>
+        <button class="primary" type="submit">Publish this window →</button>
+      </form>
     </div>
   </div>
 
-  <div class="modal-backdrop" id="rewardsModal" aria-hidden="true">
-    <div class="capture-modal rewards-modal" role="dialog" aria-modal="true" aria-labelledby="rewardsTitle">
-      <div class="modal-head"><div><span class="eyebrow">MOMENTUM</span><h2 id="rewardsTitle">Your effort is adding up.</h2></div><button class="close-btn" id="closeRewards">×</button></div>
-      <div class="level-card"><span>LEVEL 3</span><strong>Momentum Builder</strong><div class="level-track"><i id="levelProgress"></i></div><small id="levelCaption">280 / 400 XP to level 4</small></div>
-      <div class="badge-grid">
-        <article class="badge earned"><span>◈</span><strong>First Focus</strong><small>Finished a timed session</small></article>
-        <article class="badge earned"><span>✦</span><strong>Three-Day Flow</strong><small>Productive 3 days running</small></article>
-        <article class="badge"><span>◇</span><strong>Closer</strong><small>Finish 5 tasks in one day</small></article>
-      </div>
-      <p class="reward-note">Progress earns XP. Finishing a task earns a small bonus. Showing up on another productive day grows your streak.</p>
+  <div class="modal-layer" id="shareModal" aria-hidden="true"><div class="modal share-modal" role="dialog" aria-modal="true"><header class="modal-head"><div><p class="eyebrow">VISITOR PREVIEW</p><h2>This is what they will see.</h2></div><button data-close="shareModal">×</button></header><div id="visitorPreview"></div></div></div>
+
+  <div class="modal-layer" id="rescueModal" aria-hidden="true">
+    <div class="modal small-modal" role="dialog" aria-modal="true">
+      <header class="modal-head"><div><p class="eyebrow">RECOVERY, NOT GUILT</p><h2>What is blocking this?</h2></div><button data-close="rescueModal">×</button></header>
+      <p class="rescue-name" id="rescueName"></p>
+      <div class="rescue-options"><button data-rescue="tiny"><span>↳</span><div><b>It feels too big</b><small>Turn it into a 15-minute start</small></div></button><button data-rescue="unclear"><span>?</span><div><b>The next step is unclear</b><small>Add a concrete starting action</small></div></button><button data-rescue="later"><span>→</span><div><b>It matters, but not today</b><small>Move it without breaking your streak</small></div></button><button data-rescue="drop"><span>×</span><div><b>It no longer matters</b><small>Release the commitment</small></div></button></div>
     </div>
   </div>
 
-  <div class="timer-dock" id="timerDock" aria-live="polite">
-    <div class="timer-orbit"><span id="timerGlyph">▶</span></div>
-    <div class="timer-copy"><small>FOCUSING ON</small><strong id="timerTask">Task name</strong></div>
-    <time id="timerTime">25:00</time>
-    <button id="timerPause">Pause</button><button class="timer-close" id="timerClose">×</button>
-  </div>
-
-  <div class="reward-burst" id="rewardBurst"><span>✦</span><strong id="burstTitle">+40 XP</strong><small id="burstText">Progress made. Keep the thread.</small></div>
-
-  <div class="toast" id="toast"><span>✓</span><p>Task captured</p></div>
+  <div class="timer-dock" id="timerDock"><button class="timer-ring" id="timerToggle">▶</button><div><small>FOCUSING ON</small><strong id="timerTask">Task</strong></div><time id="timerTime">25:00</time><button class="timer-stop" id="timerStop">Finish session</button><button class="bare" id="timerClose">×</button></div>
+  <div class="toast" id="toast"><span>✓</span><div><b id="toastTitle">Saved</b><small id="toastText">Your change is ready.</small></div></div>
+  <div class="xp-burst" id="xpBurst"><span>✦</span><b id="xpBurstValue">+10 XP</b><small id="xpBurstText">Momentum earned</small></div>
   <script src="app.js"></script>
 </body>
 </html>
