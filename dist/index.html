@@ -26,6 +26,9 @@
       <button class="nav-item" data-view="inbox">
         <span class="nav-icon">↓</span><span>Inbox</span><span class="nav-count" id="inboxCount">3</span>
       </button>
+      <button class="nav-item" data-view="planner">
+        <span class="nav-icon">◇</span><span>Flex planner</span><span class="nav-count" id="plannerCount">1</span>
+      </button>
       <button class="nav-item" data-view="all">
         <span class="nav-icon">☷</span><span>All tasks</span>
       </button>
@@ -34,9 +37,14 @@
       </button>
     </nav>
 
-    <div class="sidebar-section">
-      <p class="eyebrow">AREAS</p>
-      <button class="area-item" data-area="Work"><span class="area-dot work"></span>Work <span id="workCount">3</span></button>
+    <div class="sidebar-section spaces">
+      <p class="eyebrow">SPACES</p>
+      <button class="area-item" data-area="Career"><span class="area-dot work"></span>Career <span id="careerCount">5</span></button>
+      <div class="subspace-list">
+        <button data-subcategory="College">↳ College <span id="collegeCount">2</span></button>
+        <button data-subcategory="DSA">↳ DSA <span id="dsaCount">1</span></button>
+        <button data-subcategory="Meetings">↳ Meetings <span id="meetingsCount">1</span></button>
+      </div>
       <button class="area-item" data-area="Personal"><span class="area-dot personal"></span>Personal <span id="personalCount">3</span></button>
       <button class="area-item" data-area="Growth"><span class="area-dot growth"></span>Growth <span id="growthCount">2</span></button>
     </div>
@@ -68,13 +76,20 @@
           <p class="overline" id="overline">FRIDAY · 16 OCTOBER</p>
           <h1 id="viewTitle">Good morning.<br><em>What matters today?</em></h1>
         </div>
-        <div class="capacity-card" id="capacityCard">
-          <div class="capacity-ring" id="capacityRing"><span id="capacityPercent">72%</span></div>
-          <div>
-            <p>Today’s load</p>
-            <strong id="capacityText">3h 35m of 5h</strong>
-            <small id="capacityHint">Comfortably achievable</small>
+        <div class="hero-insights">
+          <div class="capacity-card" id="capacityCard">
+            <div class="capacity-ring" id="capacityRing"><span id="capacityPercent">72%</span></div>
+            <div>
+              <p>Today’s load</p>
+              <strong id="capacityText">3h 35m of 5h</strong>
+              <small id="capacityHint">Comfortably achievable</small>
+            </div>
           </div>
+          <button class="reward-card" id="rewardCard" title="Open rewards">
+            <span class="streak-flame">◆</span>
+            <span><small>PRODUCTIVE STREAK</small><strong><b id="streakDays">4</b> days</strong></span>
+            <span class="xp-pill"><b id="xpCount">280</b> XP</span>
+          </button>
         </div>
       </section>
 
@@ -130,7 +145,7 @@
     <button class="active" data-view="today"><span>⌁</span>Today</button>
     <button data-view="inbox"><span>↓</span>Inbox</button>
     <button class="mobile-add" id="mobileAdd">+</button>
-    <button data-view="all"><span>☷</span>All</button>
+    <button data-view="planner"><span>◇</span>Plan</button>
     <button data-view="waiting"><span>◴</span>Waiting</button>
   </nav>
 
@@ -143,11 +158,16 @@
       <form id="taskForm">
         <textarea id="taskInput" rows="3" placeholder="What needs your attention?" required></textarea>
         <div class="form-grid">
-          <label>Area<select id="taskArea"><option>Work</option><option>Personal</option><option>Growth</option></select></label>
+          <label>Space<select id="taskArea"><option>Career</option><option>Personal</option><option>Growth</option></select></label>
+          <label>Subcategory<select id="taskSubcategory"><option>College</option><option>DSA</option><option>Meetings</option><option>Projects</option></select></label>
           <label>Time<select id="taskDuration"><option value="15">15 min</option><option value="30" selected>30 min</option><option value="45">45 min</option><option value="60">1 hour</option><option value="90">1.5 hours</option></select></label>
           <label>Energy<select id="taskEnergy"><option value="low">Low</option><option value="medium" selected>Medium</option><option value="high">High</option></select></label>
-          <label>When<select id="taskWhen"><option value="inbox">Decide later</option><option value="today">Today</option><option value="next">Next up</option></select></label>
+          <label>When<select id="taskWhen"><option value="inbox">Decide later</option><option value="today">Today</option><option value="next">Next up</option><option value="flex">Flexible day</option></select></label>
+          <label>Date<input type="date" id="taskDate"></label>
+          <label>Earliest time<input type="time" id="windowStart" value="10:00"></label>
+          <label>Latest time<input type="time" id="windowEnd" value="22:00"></label>
         </div>
+        <label class="timer-choice"><input type="checkbox" id="taskTimer"> <span>Add a focus timer for this task</span></label>
         <div class="form-footer"><span>Press <kbd>Ctrl</kbd> + <kbd>Enter</kbd></span><button type="submit">Capture task <span>→</span></button></div>
       </form>
     </div>
@@ -165,6 +185,28 @@
       </div>
     </div>
   </div>
+
+  <div class="modal-backdrop" id="rewardsModal" aria-hidden="true">
+    <div class="capture-modal rewards-modal" role="dialog" aria-modal="true" aria-labelledby="rewardsTitle">
+      <div class="modal-head"><div><span class="eyebrow">MOMENTUM</span><h2 id="rewardsTitle">Your effort is adding up.</h2></div><button class="close-btn" id="closeRewards">×</button></div>
+      <div class="level-card"><span>LEVEL 3</span><strong>Momentum Builder</strong><div class="level-track"><i id="levelProgress"></i></div><small id="levelCaption">280 / 400 XP to level 4</small></div>
+      <div class="badge-grid">
+        <article class="badge earned"><span>◈</span><strong>First Focus</strong><small>Finished a timed session</small></article>
+        <article class="badge earned"><span>✦</span><strong>Three-Day Flow</strong><small>Productive 3 days running</small></article>
+        <article class="badge"><span>◇</span><strong>Closer</strong><small>Finish 5 tasks in one day</small></article>
+      </div>
+      <p class="reward-note">Progress earns XP. Finishing a task earns a small bonus. Showing up on another productive day grows your streak.</p>
+    </div>
+  </div>
+
+  <div class="timer-dock" id="timerDock" aria-live="polite">
+    <div class="timer-orbit"><span id="timerGlyph">▶</span></div>
+    <div class="timer-copy"><small>FOCUSING ON</small><strong id="timerTask">Task name</strong></div>
+    <time id="timerTime">25:00</time>
+    <button id="timerPause">Pause</button><button class="timer-close" id="timerClose">×</button>
+  </div>
+
+  <div class="reward-burst" id="rewardBurst"><span>✦</span><strong id="burstTitle">+40 XP</strong><small id="burstText">Progress made. Keep the thread.</small></div>
 
   <div class="toast" id="toast"><span>✓</span><p>Task captured</p></div>
   <script src="app.js"></script>
