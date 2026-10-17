@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&family=Newsreader:ital,opsz,wght@1,6..72,500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=paper-v2">
 </head>
 <body>
   <div class="grain" aria-hidden="true"></div>
@@ -20,6 +20,7 @@
       <button class="nav-item active" data-view="today"><span>⌁</span><b>Today</b><i id="todayCount">4</i></button>
       <button class="nav-item" data-view="planner"><span>▦</span><b>Hour planner</b><i id="plannerCount">5</i></button>
       <button class="nav-item" data-view="inbox"><span>↓</span><b>Inbox</b><i id="inboxCount">3</i></button>
+      <button class="nav-item" data-view="paper"><span>✎</span><b>Paper page</b><i id="paperCount">0</i></button>
       <button class="nav-item" data-view="all"><span>☷</span><b>All tasks</b><i id="allCount">0</i></button>
       <button class="nav-item" data-view="requests"><span>↙</span><b>Time requests</b><i id="requestCount">2</i></button>
     </nav>
@@ -49,7 +50,7 @@
   </main>
 
   <nav class="mobile-nav" aria-label="Mobile navigation">
-    <button class="active" data-view="today"><span>⌁</span>Today</button><button data-view="planner"><span>▦</span>Plan</button><button class="mobile-add" id="mobileAdd" aria-label="Add task">+</button><button data-view="inbox"><span>↓</span>Inbox</button><button id="mobileSearch"><span>⌕</span>Search</button>
+    <button class="active" data-view="today"><span>⌁</span>Today</button><button data-view="planner"><span>▦</span>Plan</button><button class="mobile-add" id="mobileAdd" aria-label="Add task">+</button><button data-view="paper"><span>✎</span>Paper</button><button id="mobileSearch"><span>⌕</span>Search</button>
   </nav>
 
   <div class="modal-layer" id="searchModal" aria-hidden="true">
@@ -109,7 +110,7 @@
   <div class="timer-dock" id="timerDock"><button class="timer-ring" id="timerToggle">▶</button><div><small>FOCUSING ON</small><strong id="timerTask">Task</strong></div><time id="timerTime">25:00</time><button class="timer-stop" id="timerStop">Finish session</button><button class="bare" id="timerClose">×</button></div>
   <div class="toast" id="toast"><span>✓</span><div><b id="toastTitle">Saved</b><small id="toastText">Your change is ready.</small></div></div>
   <div class="xp-burst" id="xpBurst"><span>✦</span><b id="xpBurstValue">+10 XP</b><small id="xpBurstText">Momentum earned</small></div>
-  <script src="app.js"></script>
-  <script type="module" src="scene.js"></script>
+  <script src="app.js?v=paper-v2"></script>
+  <script type="module" src="scene.js?v=paper-v2"></script>
 </body>
 </html>

@@ -44,6 +44,8 @@ const clone = obj => JSON.parse(JSON.stringify(obj));
 let state = (() => { try { return { ...clone(seed), ...JSON.parse(localStorage.getItem(STORE) || '{}') }; } catch { return clone(seed); } })();
 let ui = { view: 'today', space: null, category: null, planningDate: iso(), rescueId: null, timer: null };
 let timerHandle = null;
+state.paper ||= { title: 'Everything on my mind', strokes: [], shapes: [], texts: [{ id: 9001, x: 7.5, y: 11.5, text: 'Do what matters. Leave room to breathe.', type: 'note' }], layout: {}, sequence: [] };
+state.paper.strokes ||= []; state.paper.shapes ||= []; state.paper.texts ||= []; state.paper.layout ||= {}; state.paper.sequence ||= [];
 const save = () => localStorage.setItem(STORE, JSON.stringify(state));
 
 function reward(points, text) {
@@ -65,9 +67,10 @@ function setProductive() {
 
 function taskCard(task) {
   const done = task.progress >= 100;
-  return `<article class="task-row ${done ? 'done' : ''}" data-task="${task.id}">
+  const order = state.paper.sequence.indexOf(task.id);
+  return `<article class="task-row ${done ? 'done' : ''} ${task.paperEmphasis ? 'paper-important' : ''}" data-task="${task.id}">
     <button class="task-check" data-action="complete" aria-label="${done ? 'Mark incomplete' : 'Complete task'}">${done ? '✓' : ''}</button>
-    <div><div class="task-title">${esc(task.title)}</div><div class="task-meta"><span class="mini-dot" style="background:${color(task.area)}"></span>${esc(task.area)} / ${esc(task.category)} · ${duration(task.duration)} <span class="energy">${task.energy}</span>${task.start ? ` · ${clock(mins(task.start))}` : ''}</div></div>
+    <div><div class="task-title">${esc(task.title)}</div><div class="task-meta"><span class="mini-dot" style="background:${color(task.area)}"></span>${esc(task.area)} / ${esc(task.category)} · ${duration(task.duration)} <span class="energy">${task.energy}</span>${task.start ? ` · ${clock(mins(task.start))}` : ''}${order>=0?` <span class="paper-order">Paper #${order+1}</span>`:''}${task.paperEmphasis?` · ${task.paperEmphasis} marked`:''}</div></div>
     <div class="task-side"><button class="icon-action" data-action="timer" title="Start timer">◷</button><button class="icon-action" data-action="calendar" title="Export calendar event">▣</button><button class="icon-action" data-action="publish" title="${task.publish ? 'Remove from shared calendar' : 'Show on shared calendar'}">${task.publish ? '●' : '○'}</button></div>
     <label class="progress-line"><input type="range" min="0" max="100" step="5" value="${task.progress}" data-progress><span>${task.progress}%</span></label>
     ${task.next ? `<div class="next-step">Next: ${esc(task.next)}</div>` : ''}
@@ -160,6 +163,36 @@ function allView() {
     ${groups.map(area=>{const items=open.filter(t=>t.area===area);return `<section class="all-group"><div class="all-group-head"><h2><span class="mini-dot" style="background:${color(area)}"></span> ${area}</h2><span>${items.length} open</span></div><div class="task-list">${items.length?items.map(taskCard).join(''):'<div class="empty"><b>No matching tasks.</b>This area is clear.</div>'}</div></section>`}).join('')}`;
 }
 
+function paperPosition(task, index) {
+  if (state.paper.layout[task.id]) return state.paper.layout[task.id];
+  const col = index % 4, row = Math.floor(index / 4);
+  return { x: 7.5 + col * 22.5, y: 19 + row * 15 };
+}
+function paperView() {
+  const tasks = state.tasks.filter(t => t.progress < 100 || state.paper.layout[t.id]);
+  const ordered = [...tasks].sort((a,b) => {
+    const ai=state.paper.sequence.indexOf(a.id), bi=state.paper.sequence.indexOf(b.id);
+    if(ai>=0||bi>=0) return (ai<0?999:ai)-(bi<0?999:bi);
+    return a.id-b.id;
+  });
+  return `${pageHead('WHEN STRUCTURE FAILS, USE THE PAGE', `Your paper page.<br><em>See everything at once.</em>`, `<span class="paper-page-count">${tasks.filter(t=>t.progress<100).length} open tasks on one page</span>`)}
+    <section class="paper-shell">
+      <div class="paper-toolbar" role="toolbar" aria-label="Paper tools">
+        ${[['select','↖','Move'],['pen','✎','Pen'],['text','T','Text'],['heading','H','Heading'],['circle','◯','Circle'],['box','□','Box'],['tick','✓','Tick'],['eraser','⌫','Eraser']].map(([tool,icon,label])=>`<button class="paper-tool ${tool==='select'?'active':''}" data-paper-tool="${tool}" title="${label}"><span>${icon}</span><b>${label}</b></button>`).join('')}
+        <form class="paper-quick" id="paperQuickForm"><input id="paperQuickInput" placeholder="Write a task straight onto the page…"><button>Add task</button></form>
+        <button class="paper-save" data-paper-order>Use page order</button><button class="paper-save" data-clear-ink>Clear ink</button>
+      </div>
+      <div class="paper-board-wrap"><div class="paper-board" id="paperBoard" data-tool="select">
+        <canvas id="paperCanvas" width="1180" height="790"></canvas>
+        <div class="paper-title" id="paperTitle" contenteditable="true" spellcheck="false">${esc(state.paper.title)}</div>
+        <span class="paper-hint">DRAG · WRITE · CIRCLE · CHECK · REORDER</span>
+        ${ordered.map((task,index)=>{const p=paperPosition(task,index);const order=state.paper.sequence.indexOf(task.id);return `<article class="paper-task ${task.progress>=100?'is-done':''} ${task.paperEmphasis?`emphasis-${task.paperEmphasis}`:''}" data-paper-task="${task.id}" style="left:${p.x}%;top:${p.y}%"><button class="paper-check" data-paper-complete="${task.id}">${task.progress>=100?'✓':''}</button><b>${esc(task.title)}</b><small>${esc(task.area)} / ${esc(task.category)} · ${task.progress}%</small>${order>=0?`<span class="paper-seq">#${order+1}</span>`:''}<button class="paper-mark" data-paper-mark="${task.id}" title="Cycle circle, box and highlight">${task.paperEmphasis==='circle'?'◯':task.paperEmphasis==='box'?'□':task.paperEmphasis==='star'?'★':'☆'}</button></article>`}).join('')}
+        ${state.paper.texts.map(note=>`<div class="paper-text ${note.type==='heading'?'heading':''}" contenteditable="true" spellcheck="false" data-paper-text="${note.id}" style="left:${note.x}%;top:${note.y}%">${esc(note.text)}</div>`).join('')}
+      </div></div>
+      <div class="paper-key"><span><b><i style="background:var(--coral)"></i>Circle = important</b><b><i style="border:2px solid var(--ink)"></i>Box = protected</b><b><i style="background:var(--lime)"></i>Highlight = priority</b></span><span>Everything created here also lives in tasks.</span></div>
+    </section>`;
+}
+
 function requestCard(r) {
   return `<article class="request-card ${r.status !== 'pending' ? 'resolved' : ''}" data-request="${r.id}"><div class="request-head"><div class="request-person"><span class="person-avatar">${r.initials}</span><div><h3>${esc(r.name)}</h3><p>${dateLabel(r.date)} · ${clock(mins(r.start))} · ${duration(r.duration)}</p></div></div><span class="pending-pill">${r.status.toUpperCase()}</span></div><div class="request-purpose">${esc(r.purpose)}</div><p class="request-note">${esc(r.note)}</p><div class="request-facts"><div><small>EXPECTED RESULT</small><b>${esc(r.outcome)}</b></div><div><small>URGENCY</small><b>${esc(r.urgency)}</b></div><div><small>FLEXIBILITY</small><b>${esc(r.flexibility)}</b></div><div><small>TIME ASKED</small><b>${duration(r.duration)}</b></div></div><div class="impact-box ${r.safe ? 'safe' : ''}"><b>${r.safe ? '✓ Fits your plan: ' : '⚠ Scheduling impact: '}</b>${esc(r.impact)}</div><div class="request-actions"><button class="accept" data-request-action="accept">Approve + create plan</button><button data-request-action="shorten">Offer 30 minutes</button><button data-request-action="reject">Decline</button></div></article>`;
 }
@@ -190,15 +223,17 @@ function insightsView() {
 }
 
 function render() {
-  const renderers = { today: todayView, planner: plannerView, inbox: inboxView, all: allView, requests: requestsView, share: shareView, insights: insightsView };
+  const renderers = { today: todayView, planner: plannerView, inbox: inboxView, paper: paperView, all: allView, requests: requestsView, share: shareView, insights: insightsView };
   $('#app').innerHTML = attentionRail() + (renderers[ui.view] || todayView)();
   $$('.nav-item,.mobile-nav button[data-view]').forEach(b => b.classList.toggle('active', b.dataset.view === ui.view));
   const todayOpen = state.tasks.filter(t => t.date === iso() && t.progress < 100).length;
   $('#todayCount').textContent = todayOpen; $('#plannerCount').textContent = state.tasks.filter(t => t.date === ui.planningDate && t.progress < 100).length;
   $('#inboxCount').textContent = state.tasks.filter(t => t.plan === 'inbox' && t.progress < 100).length;
   $('#allCount').textContent = state.tasks.filter(t => t.progress < 100).length;
+  $('#paperCount').textContent = state.tasks.filter(t => t.progress < 100).length;
   $('#requestCount').textContent = state.requests.filter(r => r.status === 'pending').length;
   ['Career','Personal','Growth'].forEach(a => $(`#${a.toLowerCase()}Count`).textContent = state.tasks.filter(t => t.area === a && t.progress < 100).length);
+  if (ui.view === 'paper') requestAnimationFrame(initPaperBoard);
 }
 
 function setView(view) { ui.view = view; if (view !== 'inbox') { ui.space = null; ui.category = null; } render(); $('#sidebar').classList.remove('open'); window.scrollTo({ top: 0, behavior: 'smooth' }); }
@@ -246,6 +281,39 @@ function renderSearchResults(query = '') {
 }
 function openSearch() { openModal('searchModal'); $('#globalSearch').value=''; renderSearchResults(); setTimeout(()=>$('#globalSearch').focus(),80); }
 
+let paperRuntime = { tool: 'select', stroke: null, shape: null, drag: null };
+function drawPaperCanvas(preview = null) {
+  const canvas=$('#paperCanvas'); if(!canvas) return; const ctx=canvas.getContext('2d');
+  ctx.clearRect(0,0,canvas.width,canvas.height); ctx.lineCap='round'; ctx.lineJoin='round';
+  const drawStroke = stroke => { if(!stroke.points?.length)return;ctx.beginPath();ctx.strokeStyle=stroke.color||'#252a27';ctx.lineWidth=stroke.width||2.2;ctx.moveTo(stroke.points[0].x,stroke.points[0].y);stroke.points.slice(1).forEach(p=>ctx.lineTo(p.x,p.y));ctx.stroke(); };
+  state.paper.strokes.forEach(drawStroke); if(paperRuntime.stroke) drawStroke(paperRuntime.stroke);
+  const drawShape = shape => { ctx.beginPath();ctx.strokeStyle=shape.color||'#ff7962';ctx.lineWidth=shape.width||2.6;if(shape.type==='circle'){const cx=(shape.x1+shape.x2)/2,cy=(shape.y1+shape.y2)/2,rx=Math.abs(shape.x2-shape.x1)/2,ry=Math.abs(shape.y2-shape.y1)/2;ctx.ellipse(cx,cy,Math.max(3,rx),Math.max(3,ry),-.035,0,Math.PI*2);}else if(shape.type==='box'){ctx.rect(shape.x1,shape.y1,shape.x2-shape.x1,shape.y2-shape.y1);}else if(shape.type==='tick'){ctx.moveTo(shape.x1-11,shape.y1);ctx.lineTo(shape.x1-2,shape.y1+10);ctx.lineTo(shape.x1+16,shape.y1-13);}ctx.stroke(); };
+  state.paper.shapes.forEach(drawShape); if(preview) drawShape(preview);
+}
+function paperPoint(event, board) { const r=board.getBoundingClientRect();return{x:(event.clientX-r.left)*1180/r.width,y:(event.clientY-r.top)*790/r.height}; }
+function initPaperBoard() {
+  const board=$('#paperBoard'),canvas=$('#paperCanvas');if(!board||!canvas)return;paperRuntime.tool='select';drawPaperCanvas();
+  const chooseTool=tool=>{paperRuntime.tool=tool;board.dataset.tool=tool;$$('[data-paper-tool]').forEach(b=>b.classList.toggle('active',b.dataset.paperTool===tool));canvas.style.pointerEvents=tool==='select'?'none':'auto';};
+  $$('[data-paper-tool]').forEach(button=>button.addEventListener('click',()=>chooseTool(button.dataset.paperTool)));
+  board.addEventListener('pointerdown',event=>{
+    const taskEl=event.target.closest('[data-paper-task]');
+    if(paperRuntime.tool==='select'&&taskEl&&!event.target.closest('button')){const p=paperPoint(event,board),task=state.tasks.find(t=>t.id===Number(taskEl.dataset.paperTask)),pos=state.paper.layout[task.id]||paperPosition(task,state.tasks.filter(t=>t.progress<100).indexOf(task));paperRuntime.drag={el:taskEl,id:task.id,dx:p.x-pos.x/100*1180,dy:p.y-pos.y/100*790};taskEl.setPointerCapture?.(event.pointerId);return;}
+    if(paperRuntime.tool==='text'||paperRuntime.tool==='heading'){const p=paperPoint(event,board);state.paper.texts.push({id:uid(),x:p.x/11.8,y:p.y/7.9,text:paperRuntime.tool==='heading'?'New heading':'Write here…',type:paperRuntime.tool});save();render();return;}
+    const p=paperPoint(event,board);
+    if(paperRuntime.tool==='pen'){paperRuntime.stroke={id:uid(),color:'#252a27',width:2.2,points:[p]};canvas.setPointerCapture?.(event.pointerId);}
+    if(paperRuntime.tool==='circle'||paperRuntime.tool==='box'){paperRuntime.shape={id:uid(),type:paperRuntime.tool,color:paperRuntime.tool==='circle'?'#ff7962':'#252a27',x1:p.x,y1:p.y,x2:p.x,y2:p.y};canvas.setPointerCapture?.(event.pointerId);}
+    if(paperRuntime.tool==='tick'){state.paper.shapes.push({id:uid(),type:'tick',color:'#4d7420',x1:p.x,y1:p.y,x2:p.x,y2:p.y});save();drawPaperCanvas();}
+    if(paperRuntime.tool==='eraser'){const near=stroke=>stroke.points?.some(q=>Math.hypot(q.x-p.x,q.y-p.y)<22);let i=state.paper.strokes.findLastIndex(near);if(i>=0)state.paper.strokes.splice(i,1);else if(state.paper.shapes.length)state.paper.shapes.pop();save();drawPaperCanvas();}
+  });
+  board.addEventListener('pointermove',event=>{const p=paperPoint(event,board);if(paperRuntime.stroke){paperRuntime.stroke.points.push(p);drawPaperCanvas();}if(paperRuntime.shape){paperRuntime.shape.x2=p.x;paperRuntime.shape.y2=p.y;drawPaperCanvas(paperRuntime.shape);}if(paperRuntime.drag){const x=Math.max(2,Math.min(79,(p.x-paperRuntime.drag.dx)/11.8)),y=Math.max(10,Math.min(86,(p.y-paperRuntime.drag.dy)/7.9));paperRuntime.drag.el.style.left=`${x}%`;paperRuntime.drag.el.style.top=`${y}%`;paperRuntime.drag.x=x;paperRuntime.drag.y=y;}});
+  const end=()=>{if(paperRuntime.stroke){state.paper.strokes.push(paperRuntime.stroke);paperRuntime.stroke=null;save();drawPaperCanvas();}if(paperRuntime.shape){state.paper.shapes.push(paperRuntime.shape);paperRuntime.shape=null;save();drawPaperCanvas();}if(paperRuntime.drag){state.paper.layout[paperRuntime.drag.id]={x:paperRuntime.drag.x??parseFloat(paperRuntime.drag.el.style.left),y:paperRuntime.drag.y??parseFloat(paperRuntime.drag.el.style.top)};paperRuntime.drag=null;save();}};
+  board.addEventListener('pointerup',end);board.addEventListener('pointercancel',end);
+  $('#paperTitle')?.addEventListener('blur',event=>{state.paper.title=event.target.textContent.trim()||'Everything on my mind';save();});
+  $$('[data-paper-text]').forEach(el=>el.addEventListener('blur',()=>{const note=state.paper.texts.find(n=>n.id===Number(el.dataset.paperText));if(note){note.text=el.textContent.trim();save();}}));
+  $('#paperQuickForm')?.addEventListener('submit',event=>{event.preventDefault();const input=$('#paperQuickInput'),title=input.value.trim();if(!title)return;const id=uid();state.tasks.push({id,title,area:'Personal',category:'Paper capture',duration:30,energy:'medium',date:null,start:null,plan:'inbox',progress:0,next:'Clarify this paper capture',timer:false,publish:false,calendar:false,postponed:0});state.paper.layout[id]={x:38,y:67};state.paper.sequence.push(id);save();reward(5,'A scribble became a real task');toast('Task added from paper','It is also visible in Inbox and All Tasks.');render();});
+  chooseTool('select');
+}
+
 document.addEventListener('click', event => {
   const view = event.target.closest('[data-view]'); if (view) { event.preventDefault(); setView(view.dataset.view); return; }
   const opener = event.target.closest('[data-open]'); if (opener) { openModal(opener.dataset.open); return; }
@@ -254,6 +322,10 @@ document.addEventListener('click', event => {
   const startNow = event.target.closest('[data-start-now]'); if (startNow) { const task=state.tasks.find(t=>t.id===Number(startNow.dataset.startNow)); if(task) startTimer(task); return; }
   const placeTask = event.target.closest('[data-place-task]'); if (placeTask) { const task=state.tasks.find(t=>t.id===Number(placeTask.dataset.placeTask)); if(task) ui.planningDate=task.date||iso(); setView('planner'); return; }
   const searchTask = event.target.closest('[data-search-task]'); if(searchTask){const task=state.tasks.find(t=>t.id===Number(searchTask.dataset.searchTask));ui.allQuery=task?.title||'';closeModal('searchModal');setView('all');return;}
+  const paperComplete=event.target.closest('[data-paper-complete]');if(paperComplete){const task=state.tasks.find(t=>t.id===Number(paperComplete.dataset.paperComplete));if(task)updateProgress(task.id,task.progress>=100?0:100);return;}
+  const paperMark=event.target.closest('[data-paper-mark]');if(paperMark){const task=state.tasks.find(t=>t.id===Number(paperMark.dataset.paperMark));if(task){const marks=[null,'circle','box','star'],current=marks.includes(task.paperEmphasis)?task.paperEmphasis:null;task.paperEmphasis=marks[(marks.indexOf(current)+1)%marks.length];save();render();toast(task.paperEmphasis?`Marked ${task.paperEmphasis}`:'Mark removed','The same importance appears in structured task views.');}return;}
+  if(event.target.closest('[data-paper-order]')){const open=state.tasks.filter(t=>t.progress<100);state.paper.sequence=open.sort((a,b)=>{const pa=state.paper.layout[a.id]||paperPosition(a,open.indexOf(a)),pb=state.paper.layout[b.id]||paperPosition(b,open.indexOf(b));return Math.abs(pa.y-pb.y)>4?pa.y-pb.y:pa.x-pb.x;}).map(t=>t.id);save();render();reward(10,'Your visual sequence now guides task views');toast('Page order saved','Sequence numbers now appear across the website.');return;}
+  if(event.target.closest('[data-clear-ink]')){state.paper.strokes=[];state.paper.shapes=[];save();drawPaperCanvas();toast('Ink cleared','Tasks and written notes stayed on the page.');return;}
   const taskEl = event.target.closest('[data-task]');
   if (taskEl) {
     const task = state.tasks.find(t => t.id === Number(taskEl.dataset.task)); if (!task) return;
@@ -314,7 +386,7 @@ $('#taskForm').addEventListener('submit', event => {
 $('#freeForm').addEventListener('submit',event=>{event.preventDefault();state.availability.push({id:uid(),date:$('#freeDate').value,start:$('#freeStart').value,end:$('#freeEnd').value,label:$('#freeLabel').value,max:Number($('#freeMax').value)});save();closeModal('freeModal');toast('Free time published','Visitors can request this window, subject to approval.');render();});
 $('#timerToggle').addEventListener('click',()=>{if(!ui.timer)return;ui.timer.running=!ui.timer.running;$('#timerToggle').textContent=ui.timer.running?'Ⅱ':'▶';});
 $('#timerStop').addEventListener('click',finishTimer); $('#timerClose').addEventListener('click',closeTimer);
-$('#resetBtn').addEventListener('click',()=>{state=clone(seed);save();ui={view:'today',space:null,category:null,planningDate:iso(),rescueId:null,timer:null};closeTimer();render();toast('Demo restored','All sample data is back.');});
+$('#resetBtn').addEventListener('click',()=>{state=clone(seed);state.paper={title:'Everything on my mind',strokes:[],shapes:[],texts:[{id:9001,x:7.5,y:11.5,text:'Do what matters. Leave room to breathe.',type:'note'}],layout:{},sequence:[]};save();ui={view:'today',space:null,category:null,planningDate:iso(),rescueId:null,timer:null};closeTimer();render();toast('Demo restored','All sample data is back.');});
 $$('.modal-layer').forEach(layer=>layer.addEventListener('click',e=>{if(e.target===layer)closeModal(layer.id);}));
 document.addEventListener('keydown',e=>{const typing=['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName);if((e.key==='c'||e.key==='C')&&!typing)openModal('taskModal');if(e.key==='/'&&!typing){e.preventDefault();openSearch();}if(e.key==='Escape')$$('.modal-layer.open').forEach(m=>closeModal(m.id));});
 
