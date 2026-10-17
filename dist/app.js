@@ -42,11 +42,35 @@ const seed = {
 const STORE = 'life-command-v3';
 const clone = obj => JSON.parse(JSON.stringify(obj));
 let state = (() => { try { return { ...clone(seed), ...JSON.parse(localStorage.getItem(STORE) || '{}') }; } catch { return clone(seed); } })();
-let ui = { view: 'today', space: null, category: null, planningDate: iso(), rescueId: null, timer: null };
+let ui = { view: 'today', space: null, category: null, planningDate: iso(), rescueId: null, timer: null, taskFilter: 'open' };
 let timerHandle = null;
 state.paper ||= { title: 'Everything on my mind', strokes: [], shapes: [], texts: [{ id: 9001, x: 7.5, y: 11.5, text: 'Do what matters. Leave room to breathe.', type: 'note' }], layout: {}, sequence: [] };
 state.paper.strokes ||= []; state.paper.shapes ||= []; state.paper.texts ||= []; state.paper.layout ||= {}; state.paper.sequence ||= [];
+state.tasks.forEach(task => {
+  task.paperMarks ||= { circle: task.paperEmphasis === 'circle', tick: false, box: task.paperEmphasis === 'box', star: task.paperEmphasis === 'star' };
+});
 const save = () => localStorage.setItem(STORE, JSON.stringify(state));
+
+const hasMark = (task, mark) => Boolean(task.paperMarks?.[mark]);
+function matchesTaskFilter(task) {
+  const filter = ui.taskFilter || 'open';
+  if (filter === 'open') return task.progress < 100;
+  if (filter === 'circle') return hasMark(task, 'circle');
+  if (filter === 'tick') return hasMark(task, 'tick');
+  if (filter === 'not-circle') return !hasMark(task, 'circle');
+  if (filter === 'not-tick') return !hasMark(task, 'tick');
+  if (filter === 'completed') return task.progress >= 100;
+  if (filter === 'under-5') return task.progress < 5;
+  return true;
+}
+function taskFilterBar() {
+  const filters = [['open','Open'],['all','Everything'],['circle','◯ Important'],['tick','✓ Ready'],['not-circle','Not circled'],['not-tick','Not ticked'],['completed','Completed'],['under-5','Under 5%']];
+  return `<div class="task-filter-bar" aria-label="Task filters">${filters.map(([key,label])=>`<button class="filter-chip ${ui.taskFilter===key?'active':''}" data-task-filter="${key}">${label}</button>`).join('')}</div>`;
+}
+function taskMarkButtons(task, paper = false) {
+  const marks = [['circle','◯','Important'],['tick','✓','Ready to act'],['box','□','Protected time'],['star','★','Today focus']];
+  return `<div class="${paper?'paper-marks':'task-marks'}">${marks.map(([key,icon,label])=>`<button class="${hasMark(task,key)?'active':''}" data-task-mark="${key}" data-task-mark-id="${task.id}" title="${label}" aria-label="${label}" aria-pressed="${hasMark(task,key)}">${icon}</button>`).join('')}</div>`;
+}
 
 function reward(points, text) {
   state.profile.xp += points; save();
@@ -68,9 +92,10 @@ function setProductive() {
 function taskCard(task) {
   const done = task.progress >= 100;
   const order = state.paper.sequence.indexOf(task.id);
-  return `<article class="task-row ${done ? 'done' : ''} ${task.paperEmphasis ? 'paper-important' : ''}" data-task="${task.id}">
+  const marked = Object.values(task.paperMarks || {}).some(Boolean);
+  return `<article class="task-row ${done ? 'done' : ''} ${marked ? 'paper-important' : ''}" data-task="${task.id}">
     <button class="task-check" data-action="complete" aria-label="${done ? 'Mark incomplete' : 'Complete task'}">${done ? '✓' : ''}</button>
-    <div><div class="task-title">${esc(task.title)}</div><div class="task-meta"><span class="mini-dot" style="background:${color(task.area)}"></span>${esc(task.area)} / ${esc(task.category)} · ${duration(task.duration)} <span class="energy">${task.energy}</span>${task.start ? ` · ${clock(mins(task.start))}` : ''}${order>=0?` <span class="paper-order">Paper #${order+1}</span>`:''}${task.paperEmphasis?` · ${task.paperEmphasis} marked`:''}</div></div>
+    <div><div class="task-title">${esc(task.title)}</div><div class="task-meta"><span class="mini-dot" style="background:${color(task.area)}"></span>${esc(task.area)} / ${esc(task.category)} · ${duration(task.duration)} <span class="energy">${task.energy}</span>${task.start ? ` · ${clock(mins(task.start))}` : ''}${order>=0?` <span class="paper-order">Paper #${order+1}</span>`:''}</div>${taskMarkButtons(task)}</div>
     <div class="task-side"><button class="icon-action" data-action="timer" title="Start timer">◷</button><button class="icon-action" data-action="calendar" title="Export calendar event">▣</button><button class="icon-action" data-action="publish" title="${task.publish ? 'Remove from shared calendar' : 'Show on shared calendar'}">${task.publish ? '●' : '○'}</button></div>
     <label class="progress-line"><input type="range" min="0" max="100" step="5" value="${task.progress}" data-progress><span>${task.progress}%</span></label>
     ${task.next ? `<div class="next-step">Next: ${esc(task.next)}</div>` : ''}
@@ -155,41 +180,67 @@ function inboxView() {
 
 function allView() {
   const query = (ui.allQuery || '').toLowerCase();
-  const open = state.tasks.filter(t => t.progress < 100).filter(t => !query || [t.title,t.area,t.category,t.next].some(v=>String(v||'').toLowerCase().includes(query)));
+  const open = state.tasks.filter(matchesTaskFilter).filter(t => !query || [t.title,t.area,t.category,t.next].some(v=>String(v||'').toLowerCase().includes(query)));
   const groups = ['Career','Personal','Growth'];
-  return `${pageHead('THE GUARANTEED ESCAPE HATCH', `Every open task.<br><em>No hidden corners.</em>`, `<button class="primary" data-open="taskModal">+ Capture</button>`)}
+  return `${pageHead('THE GUARANTEED ESCAPE HATCH', `Every task.<br><em>No hidden corners.</em>`, `<button class="primary" data-open="taskModal">+ Capture</button>`)}
     <div class="all-toolbar"><input id="allSearch" value="${esc(ui.allQuery||'')}" placeholder="Filter every task by title, area, category or next action…"><span class="all-summary">${open.length} visible · ${state.tasks.filter(t=>t.progress>=100).length} completed</span></div>
+    ${taskFilterBar()}
     <div class="status-legend"><span><i style="background:var(--coral)"></i>At risk</span><span><i style="background:var(--violet)"></i>Flexible or undecided</span><span><i style="background:var(--lime)"></i>Ready to act</span><span><i style="background:#a4a8a4"></i>Inbox</span></div>
-    ${groups.map(area=>{const items=open.filter(t=>t.area===area);return `<section class="all-group"><div class="all-group-head"><h2><span class="mini-dot" style="background:${color(area)}"></span> ${area}</h2><span>${items.length} open</span></div><div class="task-list">${items.length?items.map(taskCard).join(''):'<div class="empty"><b>No matching tasks.</b>This area is clear.</div>'}</div></section>`}).join('')}`;
+    ${groups.map(area=>{const items=open.filter(t=>t.area===area);return `<section class="all-group"><div class="all-group-head"><h2><span class="mini-dot" style="background:${color(area)}"></span> ${area}</h2><span>${items.length} visible</span></div><div class="task-list">${items.length?items.map(taskCard).join(''):'<div class="empty"><b>No matching tasks.</b>This area is clear.</div>'}</div></section>`}).join('')}`;
 }
 
-function paperPosition(task, index) {
+function paperPosition(task, index, tasks = state.tasks.filter(t => t.progress < 100)) {
   if (state.paper.layout[task.id]) return state.paper.layout[task.id];
-  const col = index % 4, row = Math.floor(index / 4);
-  return { x: 7.5 + col * 22.5, y: 19 + row * 15 };
+  const areas = ['Career','Personal','Growth'], areaIndex = Math.max(0, areas.indexOf(task.area));
+  const peers = tasks.filter(t => t.area === task.area);
+  const categories = [...new Set(peers.map(t => t.category))];
+  let y = 17;
+  for (const category of categories) {
+    const categoryTasks = peers.filter(t => t.category === category);
+    if (category === task.category) { y += 3 + Math.max(0, categoryTasks.indexOf(task)) * 9.3; break; }
+    y += 3 + categoryTasks.length * 9.3;
+  }
+  return { x: 6.2 + areaIndex * 31.3, y };
+}
+function paperHeadings(tasks) {
+  const areas = ['Career','Personal','Growth'];
+  return areas.map((area, areaIndex) => {
+    const peers = tasks.filter(t => t.area === area);
+    if (!peers.length) return '';
+    const categories = [...new Set(peers.map(t => t.category))];
+    let y = 15.2;
+    const categoryLabels = categories.map(category => {
+      const label = `<div class="paper-category-heading" style="left:${6.2 + areaIndex * 31.3}%;top:${y}%">${esc(category)}</div>`;
+      y += 3 + peers.filter(t => t.category === category).length * 9.3;
+      return label;
+    }).join('');
+    return `<div class="paper-area-heading" style="left:${6.2 + areaIndex * 31.3}%;top:10.5%;border-color:${color(area)}">${esc(area)} <span>${peers.length}</span></div>${categoryLabels}`;
+  }).join('');
 }
 function paperView() {
-  const tasks = state.tasks.filter(t => t.progress < 100 || state.paper.layout[t.id]);
+  const tasks = state.tasks.filter(matchesTaskFilter);
   const ordered = [...tasks].sort((a,b) => {
     const ai=state.paper.sequence.indexOf(a.id), bi=state.paper.sequence.indexOf(b.id);
     if(ai>=0||bi>=0) return (ai<0?999:ai)-(bi<0?999:bi);
     return a.id-b.id;
   });
-  return `${pageHead('WHEN STRUCTURE FAILS, USE THE PAGE', `Your paper page.<br><em>See everything at once.</em>`, `<span class="paper-page-count">${tasks.filter(t=>t.progress<100).length} open tasks on one page</span>`)}
+  return `${pageHead('WHEN STRUCTURE FAILS, USE THE PAGE', `Your paper page.<br><em>See everything at once.</em>`, `<span class="paper-page-count">${tasks.length} visible tasks on one page</span>`)}
     <section class="paper-shell">
+      ${taskFilterBar()}
       <div class="paper-toolbar" role="toolbar" aria-label="Paper tools">
         ${[['select','↖','Move'],['pen','✎','Pen'],['text','T','Text'],['heading','H','Heading'],['circle','◯','Circle'],['box','□','Box'],['tick','✓','Tick'],['eraser','⌫','Eraser']].map(([tool,icon,label])=>`<button class="paper-tool ${tool==='select'?'active':''}" data-paper-tool="${tool}" title="${label}"><span>${icon}</span><b>${label}</b></button>`).join('')}
         <form class="paper-quick" id="paperQuickForm"><input id="paperQuickInput" placeholder="Write a task straight onto the page…"><button>Add task</button></form>
         <button class="paper-save" data-paper-order>Use page order</button><button class="paper-save" data-clear-ink>Clear ink</button>
       </div>
       <div class="paper-board-wrap"><div class="paper-board" id="paperBoard" data-tool="select">
-        <canvas id="paperCanvas" width="1180" height="790"></canvas>
+        <canvas id="paperCanvas" width="1180" height="980"></canvas>
         <div class="paper-title" id="paperTitle" contenteditable="true" spellcheck="false">${esc(state.paper.title)}</div>
         <span class="paper-hint">DRAG · WRITE · CIRCLE · CHECK · REORDER</span>
-        ${ordered.map((task,index)=>{const p=paperPosition(task,index);const order=state.paper.sequence.indexOf(task.id);return `<article class="paper-task ${task.progress>=100?'is-done':''} ${task.paperEmphasis?`emphasis-${task.paperEmphasis}`:''}" data-paper-task="${task.id}" style="left:${p.x}%;top:${p.y}%"><button class="paper-check" data-paper-complete="${task.id}">${task.progress>=100?'✓':''}</button><b>${esc(task.title)}</b><small>${esc(task.area)} / ${esc(task.category)} · ${task.progress}%</small>${order>=0?`<span class="paper-seq">#${order+1}</span>`:''}<button class="paper-mark" data-paper-mark="${task.id}" title="Cycle circle, box and highlight">${task.paperEmphasis==='circle'?'◯':task.paperEmphasis==='box'?'□':task.paperEmphasis==='star'?'★':'☆'}</button></article>`}).join('')}
+        ${paperHeadings(tasks)}
+        ${ordered.map((task,index)=>{const p=paperPosition(task,index,tasks);const order=state.paper.sequence.indexOf(task.id);const classes=['circle','tick','box','star'].filter(mark=>hasMark(task,mark)).map(mark=>`mark-${mark}`).join(' ');return `<article class="paper-task ${task.progress>=100?'is-done':''} ${classes}" data-paper-task="${task.id}" style="left:${p.x}%;top:${p.y}%"><button class="paper-check" data-paper-complete="${task.id}" aria-label="Toggle completion">${task.progress>=100?'✓':''}</button><b>${esc(task.title)}</b><small>${esc(task.category)} · ${task.progress}%</small>${order>=0?`<span class="paper-seq">#${order+1}</span>`:''}${taskMarkButtons(task,true)}</article>`}).join('')}
         ${state.paper.texts.map(note=>`<div class="paper-text ${note.type==='heading'?'heading':''}" contenteditable="true" spellcheck="false" data-paper-text="${note.id}" style="left:${note.x}%;top:${note.y}%">${esc(note.text)}</div>`).join('')}
       </div></div>
-      <div class="paper-key"><span><b><i style="background:var(--coral)"></i>Circle = important</b><b><i style="border:2px solid var(--ink)"></i>Box = protected</b><b><i style="background:var(--lime)"></i>Highlight = priority</b></span><span>Everything created here also lives in tasks.</span></div>
+      <div class="paper-key"><span><b>◯ Important</b><b>✓ Ready to act</b><b>□ Protected time</b><b>★ Today focus</b></span><span>Marks, completion and progress stay synchronized with Tasks.</span></div>
     </section>`;
 }
 
@@ -290,41 +341,42 @@ function drawPaperCanvas(preview = null) {
   const drawShape = shape => { ctx.beginPath();ctx.strokeStyle=shape.color||'#ff7962';ctx.lineWidth=shape.width||2.6;if(shape.type==='circle'){const cx=(shape.x1+shape.x2)/2,cy=(shape.y1+shape.y2)/2,rx=Math.abs(shape.x2-shape.x1)/2,ry=Math.abs(shape.y2-shape.y1)/2;ctx.ellipse(cx,cy,Math.max(3,rx),Math.max(3,ry),-.035,0,Math.PI*2);}else if(shape.type==='box'){ctx.rect(shape.x1,shape.y1,shape.x2-shape.x1,shape.y2-shape.y1);}else if(shape.type==='tick'){ctx.moveTo(shape.x1-11,shape.y1);ctx.lineTo(shape.x1-2,shape.y1+10);ctx.lineTo(shape.x1+16,shape.y1-13);}ctx.stroke(); };
   state.paper.shapes.forEach(drawShape); if(preview) drawShape(preview);
 }
-function paperPoint(event, board) { const r=board.getBoundingClientRect();return{x:(event.clientX-r.left)*1180/r.width,y:(event.clientY-r.top)*790/r.height}; }
+function paperPoint(event, board) { const r=board.getBoundingClientRect();return{x:(event.clientX-r.left)*1180/r.width,y:(event.clientY-r.top)*980/r.height}; }
 function initPaperBoard() {
   const board=$('#paperBoard'),canvas=$('#paperCanvas');if(!board||!canvas)return;paperRuntime.tool='select';drawPaperCanvas();
   const chooseTool=tool=>{paperRuntime.tool=tool;board.dataset.tool=tool;$$('[data-paper-tool]').forEach(b=>b.classList.toggle('active',b.dataset.paperTool===tool));canvas.style.pointerEvents=tool==='select'?'none':'auto';};
   $$('[data-paper-tool]').forEach(button=>button.addEventListener('click',()=>chooseTool(button.dataset.paperTool)));
   board.addEventListener('pointerdown',event=>{
     const taskEl=event.target.closest('[data-paper-task]');
-    if(paperRuntime.tool==='select'&&taskEl&&!event.target.closest('button')){const p=paperPoint(event,board),task=state.tasks.find(t=>t.id===Number(taskEl.dataset.paperTask)),pos=state.paper.layout[task.id]||paperPosition(task,state.tasks.filter(t=>t.progress<100).indexOf(task));paperRuntime.drag={el:taskEl,id:task.id,dx:p.x-pos.x/100*1180,dy:p.y-pos.y/100*790};taskEl.setPointerCapture?.(event.pointerId);return;}
-    if(paperRuntime.tool==='text'||paperRuntime.tool==='heading'){const p=paperPoint(event,board);state.paper.texts.push({id:uid(),x:p.x/11.8,y:p.y/7.9,text:paperRuntime.tool==='heading'?'New heading':'Write here…',type:paperRuntime.tool});save();render();return;}
+    if(paperRuntime.tool==='select'&&taskEl&&!event.target.closest('button')){const p=paperPoint(event,board),task=state.tasks.find(t=>t.id===Number(taskEl.dataset.paperTask)),visible=state.tasks.filter(matchesTaskFilter),pos=state.paper.layout[task.id]||paperPosition(task,visible.indexOf(task),visible);paperRuntime.drag={el:taskEl,id:task.id,dx:p.x-pos.x/100*1180,dy:p.y-pos.y/100*980};taskEl.setPointerCapture?.(event.pointerId);return;}
+    if(paperRuntime.tool==='text'||paperRuntime.tool==='heading'){const p=paperPoint(event,board);state.paper.texts.push({id:uid(),x:p.x/11.8,y:p.y/9.8,text:paperRuntime.tool==='heading'?'New heading':'Write here…',type:paperRuntime.tool});save();render();return;}
     const p=paperPoint(event,board);
     if(paperRuntime.tool==='pen'){paperRuntime.stroke={id:uid(),color:'#252a27',width:2.2,points:[p]};canvas.setPointerCapture?.(event.pointerId);}
     if(paperRuntime.tool==='circle'||paperRuntime.tool==='box'){paperRuntime.shape={id:uid(),type:paperRuntime.tool,color:paperRuntime.tool==='circle'?'#ff7962':'#252a27',x1:p.x,y1:p.y,x2:p.x,y2:p.y};canvas.setPointerCapture?.(event.pointerId);}
     if(paperRuntime.tool==='tick'){state.paper.shapes.push({id:uid(),type:'tick',color:'#4d7420',x1:p.x,y1:p.y,x2:p.x,y2:p.y});save();drawPaperCanvas();}
     if(paperRuntime.tool==='eraser'){const near=stroke=>stroke.points?.some(q=>Math.hypot(q.x-p.x,q.y-p.y)<22);let i=state.paper.strokes.findLastIndex(near);if(i>=0)state.paper.strokes.splice(i,1);else if(state.paper.shapes.length)state.paper.shapes.pop();save();drawPaperCanvas();}
   });
-  board.addEventListener('pointermove',event=>{const p=paperPoint(event,board);if(paperRuntime.stroke){paperRuntime.stroke.points.push(p);drawPaperCanvas();}if(paperRuntime.shape){paperRuntime.shape.x2=p.x;paperRuntime.shape.y2=p.y;drawPaperCanvas(paperRuntime.shape);}if(paperRuntime.drag){const x=Math.max(2,Math.min(79,(p.x-paperRuntime.drag.dx)/11.8)),y=Math.max(10,Math.min(86,(p.y-paperRuntime.drag.dy)/7.9));paperRuntime.drag.el.style.left=`${x}%`;paperRuntime.drag.el.style.top=`${y}%`;paperRuntime.drag.x=x;paperRuntime.drag.y=y;}});
+  board.addEventListener('pointermove',event=>{const p=paperPoint(event,board);if(paperRuntime.stroke){paperRuntime.stroke.points.push(p);drawPaperCanvas();}if(paperRuntime.shape){paperRuntime.shape.x2=p.x;paperRuntime.shape.y2=p.y;drawPaperCanvas(paperRuntime.shape);}if(paperRuntime.drag){const x=Math.max(2,Math.min(79,(p.x-paperRuntime.drag.dx)/11.8)),y=Math.max(10,Math.min(90,(p.y-paperRuntime.drag.dy)/9.8));paperRuntime.drag.el.style.left=`${x}%`;paperRuntime.drag.el.style.top=`${y}%`;paperRuntime.drag.x=x;paperRuntime.drag.y=y;}});
   const end=()=>{if(paperRuntime.stroke){state.paper.strokes.push(paperRuntime.stroke);paperRuntime.stroke=null;save();drawPaperCanvas();}if(paperRuntime.shape){state.paper.shapes.push(paperRuntime.shape);paperRuntime.shape=null;save();drawPaperCanvas();}if(paperRuntime.drag){state.paper.layout[paperRuntime.drag.id]={x:paperRuntime.drag.x??parseFloat(paperRuntime.drag.el.style.left),y:paperRuntime.drag.y??parseFloat(paperRuntime.drag.el.style.top)};paperRuntime.drag=null;save();}};
   board.addEventListener('pointerup',end);board.addEventListener('pointercancel',end);
   $('#paperTitle')?.addEventListener('blur',event=>{state.paper.title=event.target.textContent.trim()||'Everything on my mind';save();});
   $$('[data-paper-text]').forEach(el=>el.addEventListener('blur',()=>{const note=state.paper.texts.find(n=>n.id===Number(el.dataset.paperText));if(note){note.text=el.textContent.trim();save();}}));
-  $('#paperQuickForm')?.addEventListener('submit',event=>{event.preventDefault();const input=$('#paperQuickInput'),title=input.value.trim();if(!title)return;const id=uid();state.tasks.push({id,title,area:'Personal',category:'Paper capture',duration:30,energy:'medium',date:null,start:null,plan:'inbox',progress:0,next:'Clarify this paper capture',timer:false,publish:false,calendar:false,postponed:0});state.paper.layout[id]={x:38,y:67};state.paper.sequence.push(id);save();reward(5,'A scribble became a real task');toast('Task added from paper','It is also visible in Inbox and All Tasks.');render();});
+  $('#paperQuickForm')?.addEventListener('submit',event=>{event.preventDefault();const input=$('#paperQuickInput'),title=input.value.trim();if(!title)return;const id=uid();state.tasks.push({id,title,area:'Personal',category:'Paper capture',duration:30,energy:'medium',date:null,start:null,plan:'inbox',progress:0,next:'Clarify this paper capture',timer:false,publish:false,calendar:false,postponed:0,paperMarks:{circle:false,tick:false,box:false,star:false}});state.paper.sequence.push(id);save();reward(5,'A scribble became a real task');toast('Task added from paper','It is also visible in Inbox and All Tasks.');render();});
   chooseTool('select');
 }
 
 document.addEventListener('click', event => {
   const view = event.target.closest('[data-view]'); if (view) { event.preventDefault(); setView(view.dataset.view); return; }
+  const taskFilter = event.target.closest('[data-task-filter]'); if (taskFilter) { ui.taskFilter = taskFilter.dataset.taskFilter; render(); return; }
   const opener = event.target.closest('[data-open]'); if (opener) { openModal(opener.dataset.open); return; }
   const closer = event.target.closest('[data-close]'); if (closer) { closeModal(closer.dataset.close); return; }
   if (event.target.closest('[data-attention-open]')) { setView('all'); return; }
   const startNow = event.target.closest('[data-start-now]'); if (startNow) { const task=state.tasks.find(t=>t.id===Number(startNow.dataset.startNow)); if(task) startTimer(task); return; }
   const placeTask = event.target.closest('[data-place-task]'); if (placeTask) { const task=state.tasks.find(t=>t.id===Number(placeTask.dataset.placeTask)); if(task) ui.planningDate=task.date||iso(); setView('planner'); return; }
   const searchTask = event.target.closest('[data-search-task]'); if(searchTask){const task=state.tasks.find(t=>t.id===Number(searchTask.dataset.searchTask));ui.allQuery=task?.title||'';closeModal('searchModal');setView('all');return;}
+  const taskMark=event.target.closest('[data-task-mark]');if(taskMark){const task=state.tasks.find(t=>t.id===Number(taskMark.dataset.taskMarkId));if(task){task.paperMarks||={circle:false,tick:false,box:false,star:false};const mark=taskMark.dataset.taskMark;task.paperMarks[mark]=!task.paperMarks[mark];save();render();toast(task.paperMarks[mark]?`${taskMark.title} marked`:`${taskMark.title} removed`,'The mark changed on both Paper and Tasks.');}return;}
   const paperComplete=event.target.closest('[data-paper-complete]');if(paperComplete){const task=state.tasks.find(t=>t.id===Number(paperComplete.dataset.paperComplete));if(task)updateProgress(task.id,task.progress>=100?0:100);return;}
-  const paperMark=event.target.closest('[data-paper-mark]');if(paperMark){const task=state.tasks.find(t=>t.id===Number(paperMark.dataset.paperMark));if(task){const marks=[null,'circle','box','star'],current=marks.includes(task.paperEmphasis)?task.paperEmphasis:null;task.paperEmphasis=marks[(marks.indexOf(current)+1)%marks.length];save();render();toast(task.paperEmphasis?`Marked ${task.paperEmphasis}`:'Mark removed','The same importance appears in structured task views.');}return;}
-  if(event.target.closest('[data-paper-order]')){const open=state.tasks.filter(t=>t.progress<100);state.paper.sequence=open.sort((a,b)=>{const pa=state.paper.layout[a.id]||paperPosition(a,open.indexOf(a)),pb=state.paper.layout[b.id]||paperPosition(b,open.indexOf(b));return Math.abs(pa.y-pb.y)>4?pa.y-pb.y:pa.x-pb.x;}).map(t=>t.id);save();render();reward(10,'Your visual sequence now guides task views');toast('Page order saved','Sequence numbers now appear across the website.');return;}
+  if(event.target.closest('[data-paper-order]')){const open=state.tasks.filter(t=>t.progress<100);state.paper.sequence=open.sort((a,b)=>{const pa=state.paper.layout[a.id]||paperPosition(a,open.indexOf(a),open),pb=state.paper.layout[b.id]||paperPosition(b,open.indexOf(b),open);return Math.abs(pa.y-pb.y)>4?pa.y-pb.y:pa.x-pb.x;}).map(t=>t.id);save();render();reward(10,'Your visual sequence now guides task views');toast('Page order saved','Sequence numbers now appear across the website.');return;}
   if(event.target.closest('[data-clear-ink]')){state.paper.strokes=[];state.paper.shapes=[];save();drawPaperCanvas();toast('Ink cleared','Tasks and written notes stayed on the page.');return;}
   const taskEl = event.target.closest('[data-task]');
   if (taskEl) {
@@ -380,13 +432,13 @@ $('#focusBtn').addEventListener('click',()=>{document.body.classList.toggle('foc
 $('#taskArea').addEventListener('change',()=>{const map={Career:['College','DSA','Meetings','Projects'],Personal:['Health','Home','Relationships'],Growth:['Learning','Reading','Skills']};$('#taskCategory').innerHTML=map[$('#taskArea').value].map(x=>`<option>${x}</option>`).join('');});
 $('#taskForm').addEventListener('submit', event => {
   event.preventDefault(); const plan=$('#taskPlan').value, date=$('#taskDate').value || (plan==='inbox'?null:iso());
-  state.tasks.unshift({id:uid(),title:$('#taskTitle').value.trim(),area:$('#taskArea').value,category:$('#taskCategory').value,duration:Number($('#taskDuration').value),energy:$('#taskEnergy').value,plan,date,start:plan==='fixed'?$('#taskStart').value:null,windowStart:$('#taskStart').value,windowEnd:$('#taskEnd').value,decideBy:$('#decideBy').value||iso(),progress:0,next:$('#taskNext').value.trim(),timer:$('#taskTimer').checked,publish:$('#taskPublish').checked,publicTitle:'Focused work',calendar:$('#taskCalendar').checked,postponed:0});
+  state.tasks.unshift({id:uid(),title:$('#taskTitle').value.trim(),area:$('#taskArea').value,category:$('#taskCategory').value,duration:Number($('#taskDuration').value),energy:$('#taskEnergy').value,plan,date,start:plan==='fixed'?$('#taskStart').value:null,windowStart:$('#taskStart').value,windowEnd:$('#taskEnd').value,decideBy:$('#decideBy').value||iso(),progress:0,next:$('#taskNext').value.trim(),timer:$('#taskTimer').checked,publish:$('#taskPublish').checked,publicTitle:'Focused work',calendar:$('#taskCalendar').checked,postponed:0,paperMarks:{circle:$('#taskCircle').checked,tick:$('#taskReady').checked,box:$('#taskBox').checked,star:$('#taskStar').checked}});
   save(); event.target.reset(); $('#taskStart').value='10:00';$('#taskEnd').value='18:00';closeModal('taskModal');reward(5,'Your mind can release the task');toast('Captured','The task is safely in your command center.');render();
 });
 $('#freeForm').addEventListener('submit',event=>{event.preventDefault();state.availability.push({id:uid(),date:$('#freeDate').value,start:$('#freeStart').value,end:$('#freeEnd').value,label:$('#freeLabel').value,max:Number($('#freeMax').value)});save();closeModal('freeModal');toast('Free time published','Visitors can request this window, subject to approval.');render();});
 $('#timerToggle').addEventListener('click',()=>{if(!ui.timer)return;ui.timer.running=!ui.timer.running;$('#timerToggle').textContent=ui.timer.running?'Ⅱ':'▶';});
 $('#timerStop').addEventListener('click',finishTimer); $('#timerClose').addEventListener('click',closeTimer);
-$('#resetBtn').addEventListener('click',()=>{state=clone(seed);state.paper={title:'Everything on my mind',strokes:[],shapes:[],texts:[{id:9001,x:7.5,y:11.5,text:'Do what matters. Leave room to breathe.',type:'note'}],layout:{},sequence:[]};save();ui={view:'today',space:null,category:null,planningDate:iso(),rescueId:null,timer:null};closeTimer();render();toast('Demo restored','All sample data is back.');});
+$('#resetBtn').addEventListener('click',()=>{state=clone(seed);state.tasks.forEach(task=>task.paperMarks={circle:false,tick:false,box:false,star:false});state.paper={title:'Everything on my mind',strokes:[],shapes:[],texts:[{id:9001,x:7.5,y:11.5,text:'Do what matters. Leave room to breathe.',type:'note'}],layout:{},sequence:[]};save();ui={view:'today',space:null,category:null,planningDate:iso(),rescueId:null,timer:null,taskFilter:'open'};closeTimer();render();toast('Demo restored','All sample data is back.');});
 $$('.modal-layer').forEach(layer=>layer.addEventListener('click',e=>{if(e.target===layer)closeModal(layer.id);}));
 document.addEventListener('keydown',e=>{const typing=['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName);if((e.key==='c'||e.key==='C')&&!typing)openModal('taskModal');if(e.key==='/'&&!typing){e.preventDefault();openSearch();}if(e.key==='Escape')$$('.modal-layer.open').forEach(m=>closeModal(m.id));});
 
