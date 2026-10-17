@@ -13,6 +13,7 @@
 </head>
 <body>
   <div class="grain" aria-hidden="true"></div>
+  <canvas id="lifeScene" aria-hidden="true"></canvas>
   <aside class="sidebar" id="sidebar">
     <a class="brand" href="#" data-view="today" aria-label="Life Command Center home"><span class="brand-mark">L</span><span>Life<br>Command</span></a>
     <nav class="primary-nav" aria-label="Main navigation">
@@ -42,7 +43,7 @@
     <header class="topbar">
       <button class="menu-btn" id="menuBtn" aria-label="Open menu">☰</button>
       <div class="command-tools"><button class="capture-trigger" id="captureTrigger"><span>+</span><b>Capture anything…</b><kbd>C</kbd></button><button class="search-trigger" id="searchTrigger"><span>⌕</span><b>Find anything</b><kbd>/</kbd></button></div>
-      <div class="top-actions"><button class="focus-btn" id="focusBtn" title="Enter focus mode">◎ <span>Focus</span></button><div class="today-date"><strong id="dateDay">17</strong><span id="dateMonth">OCT</span></div></div>
+      <div class="top-actions"><button class="scene-btn active" id="sceneBtn" title="Toggle spatial effects">◉ <span>3D</span></button><button class="focus-btn" id="focusBtn" title="Enter focus mode">◎ <span>Focus</span></button><div class="today-date"><strong id="dateDay">17</strong><span id="dateMonth">OCT</span></div></div>
     </header>
     <div id="app" class="app-shell" aria-live="polite"></div>
   </main>
@@ -109,5 +110,6 @@
   <div class="toast" id="toast"><span>✓</span><div><b id="toastTitle">Saved</b><small id="toastText">Your change is ready.</small></div></div>
   <div class="xp-burst" id="xpBurst"><span>✦</span><b id="xpBurstValue">+10 XP</b><small id="xpBurstText">Momentum earned</small></div>
   <script src="app.js"></script>
+  <script type="module" src="scene.js"></script>
 </body>
 </html>
