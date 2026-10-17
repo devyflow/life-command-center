@@ -19,7 +19,11 @@
       <button class="nav-item active" data-view="today"><span>⌁</span><b>Today</b><i id="todayCount">4</i></button>
       <button class="nav-item" data-view="planner"><span>▦</span><b>Hour planner</b><i id="plannerCount">5</i></button>
       <button class="nav-item" data-view="inbox"><span>↓</span><b>Inbox</b><i id="inboxCount">3</i></button>
+      <button class="nav-item" data-view="all"><span>☷</span><b>All tasks</b><i id="allCount">0</i></button>
       <button class="nav-item" data-view="requests"><span>↙</span><b>Time requests</b><i id="requestCount">2</i></button>
+    </nav>
+    <nav class="utility-nav" aria-label="Tools">
+      <p class="eyebrow">TOOLS</p>
       <button class="nav-item" data-view="share"><span>◎</span><b>Share time</b></button>
       <button class="nav-item" data-view="insights"><span>↗</span><b>Insights</b></button>
     </nav>
@@ -37,15 +41,23 @@
   <main>
     <header class="topbar">
       <button class="menu-btn" id="menuBtn" aria-label="Open menu">☰</button>
-      <button class="capture-trigger" id="captureTrigger"><span>+</span><b>Capture anything…</b><kbd>C</kbd></button>
+      <div class="command-tools"><button class="capture-trigger" id="captureTrigger"><span>+</span><b>Capture anything…</b><kbd>C</kbd></button><button class="search-trigger" id="searchTrigger"><span>⌕</span><b>Find anything</b><kbd>/</kbd></button></div>
       <div class="top-actions"><button class="focus-btn" id="focusBtn" title="Enter focus mode">◎ <span>Focus</span></button><div class="today-date"><strong id="dateDay">17</strong><span id="dateMonth">OCT</span></div></div>
     </header>
     <div id="app" class="app-shell" aria-live="polite"></div>
   </main>
 
   <nav class="mobile-nav" aria-label="Mobile navigation">
-    <button class="active" data-view="today"><span>⌁</span>Today</button><button data-view="planner"><span>▦</span>Plan</button><button class="mobile-add" id="mobileAdd" aria-label="Add task">+</button><button data-view="requests"><span>↙</span>Requests</button><button data-view="share"><span>◎</span>Share</button>
+    <button class="active" data-view="today"><span>⌁</span>Today</button><button data-view="planner"><span>▦</span>Plan</button><button class="mobile-add" id="mobileAdd" aria-label="Add task">+</button><button data-view="inbox"><span>↓</span>Inbox</button><button id="mobileSearch"><span>⌕</span>Search</button>
   </nav>
+
+  <div class="modal-layer" id="searchModal" aria-hidden="true">
+    <div class="modal search-modal" role="dialog" aria-modal="true" aria-labelledby="searchTitle">
+      <header class="modal-head"><div><p class="eyebrow">GLOBAL SEARCH</p><h2 id="searchTitle">Nothing can hide.</h2></div><button data-close="searchModal">×</button></header>
+      <label class="search-box"><span>⌕</span><input id="globalSearch" autocomplete="off" placeholder="Search tasks, categories, people or notes…"><kbd>ESC</kbd></label>
+      <div class="search-results" id="searchResults"></div>
+    </div>
+  </div>
 
   <div class="modal-layer" id="taskModal" aria-hidden="true">
     <div class="modal task-modal" role="dialog" aria-modal="true" aria-labelledby="taskModalTitle">

@@ -78,26 +78,35 @@ function pageHead(kicker, title, actions = '') {
   return `<header class="page-head"><div><p class="page-kicker">${kicker}</p><h1>${title}</h1></div>${actions ? `<div class="head-actions">${actions}</div>` : ''}</header>`;
 }
 
+function attentionRail() {
+  const unscheduled = state.tasks.filter(t => t.date === iso() && !t.start && t.plan !== 'inbox' && t.progress < 100).length;
+  const decisions = state.tasks.filter(t => t.plan === 'window' && !t.start && t.decideBy <= iso() && t.progress < 100).length;
+  const requests = state.requests.filter(r => r.status === 'pending').length;
+  const total = unscheduled + decisions + requests;
+  return `<aside class="attention-rail"><div class="attention-copy"><i class="attention-pulse"></i><div><b>${total} item${total===1?'':'s'} need your attention</b><span>${unscheduled} unscheduled today · ${decisions} decision due · ${requests} time requests</span></div></div><button data-attention-open>Review everything →</button></aside>`;
+}
+function compactTask(task, mode = 'normal') {
+  const meta = task.start ? `${clock(mins(task.start))} · ${duration(task.duration)}` : `${duration(task.duration)} · no time chosen`;
+  const action = mode === 'risk' ? `<button data-rescue-open="${task.id}">Resolve</button>` : mode === 'flex' ? `<button data-place-task="${task.id}">Place it</button>` : `<button data-start-now="${task.id}">Start</button>`;
+  return `<div class="compact-task"><i class="state-edge ${mode}"></i><div><b>${esc(task.title)}</b><small>${meta} · ${esc(task.area)} / ${esc(task.category)}</small></div>${action}</div>`;
+}
 function todayView() {
-  const tasks = state.tasks.filter(t => t.date === iso() && t.plan !== 'inbox');
-  const open = tasks.filter(t => t.progress < 100);
-  const remaining = Math.round(open.reduce((n, t) => n + t.duration * (1 - t.progress / 100), 0));
-  const focus = Math.round(state.tasks.reduce((n, t) => n + t.duration * t.progress / 100, 0));
-  const stuck = state.tasks.filter(t => t.postponed >= 2 && t.progress < 100).sort((a, b) => b.postponed - a.postponed)[0];
-  const level = Math.floor(state.profile.xp / 400) + 3, progress = state.profile.xp % 400;
-  return `${pageHead(new Date().toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long' }).toUpperCase(), `Good morning.<br><em>Protect what matters.</em>`, `<button class="secondary" data-view="planner">Open hour plan</button><button class="primary" data-open="taskModal">+ Add task</button>`)}
-    <section class="metric-row">
-      <article class="metric"><small>REMAINING LOAD</small><strong>${duration(remaining)}</strong><span>${remaining > 300 ? 'A full day — protect focus' : 'Comfortably achievable'}</span></article>
-      <article class="metric"><small>FOCUS COMPLETED</small><strong>${duration(focus)}</strong><span>${state.profile.sessions} sessions this week</span></article>
-      <article class="metric"><small>PRODUCTIVE STREAK</small><strong>${state.profile.streak} days</strong><span>Rest never breaks recovery</span></article>
-      <article class="metric accent"><small>MOMENTUM</small><strong>${state.profile.xp} XP</strong><span>Level ${level} · ${400 - progress} XP to next</span></article>
-    </section>
-    <div class="grid-main">
-      <section class="section-card"><div class="section-title"><div><h2>Committed today</h2><p>Progress changes the time still needed.</p></div><button class="ghost-btn" data-view="planner">See timeline →</button></div><div class="task-list">${tasks.length ? tasks.map(taskCard).join('') : '<div class="empty"><b>Your day is open.</b>Capture a task or protect some free time.</div>'}</div></section>
-      <aside>
-        ${stuck ? `<article class="recovery-card"><div class="recovery-top"><p class="eyebrow">NEEDS RECOVERY</p><span>!</span></div><h3>${esc(stuck.title)}</h3><p>Postponed ${stuck.postponed} times. The problem may be the starting point, not your motivation.</p><button data-rescue-open="${stuck.id}">Unstick this task →</button></article>` : ''}
-        <article class="momentum-card"><p class="eyebrow">YOUR MOMENTUM</p><div class="level"><strong>Level ${level}</strong><small>${progress} / 400 XP</small></div><div class="xp-track"><i style="width:${progress / 4}%"></i></div><small>Rewarding focus, honest progress and realistic planning.</small><div class="badge-row"><span class="mini-badge" title="First focus">◈</span><span class="mini-badge" title="Five day flow">✦</span><span class="mini-badge" title="Accurate planner">⌁</span><span class="mini-badge locked" title="Deep work week">◇</span></div></article>
-      </aside>
+  const tasks = state.tasks.filter(t => t.date === iso() && t.plan !== 'inbox' && t.progress < 100);
+  const scheduled = tasks.filter(t => t.start).sort((a,b)=>mins(a.start)-mins(b.start));
+  const unscheduled = tasks.filter(t => !t.start);
+  const decisionDue = state.tasks.filter(t => t.plan === 'window' && !t.start && t.decideBy <= iso() && t.progress < 100);
+  const risk = [...new Map([...tasks.filter(t=>t.postponed>=2), ...decisionDue].map(t=>[t.id,t])).values()];
+  const nowTask = scheduled.find(t=>t.progress<100) || unscheduled[0];
+  const next = scheduled.filter(t=>t.id!==nowTask?.id).slice(0,3);
+  const remaining = Math.round(tasks.reduce((n,t)=>n+t.duration*(1-t.progress/100),0));
+  const level = Math.floor(state.profile.xp/400)+3;
+  return `${pageHead(new Date().toLocaleDateString('en-US',{weekday:'long',day:'numeric',month:'long'}).toUpperCase(), `Today, clearly.<br><em>Nothing out of sight.</em>`, `<button class="secondary" data-view="all">All open tasks</button><button class="primary" data-open="taskModal">+ Capture</button>`)}
+    <section class="metric-row"><article class="metric"><small>OPEN TODAY</small><strong>${tasks.length}</strong><span>${unscheduled.length} still need a time</span></article><article class="metric"><small>REMAINING LOAD</small><strong>${duration(remaining)}</strong><span>${remaining>300?'Protect your focus blocks':'Achievable with breathing room'}</span></article><article class="metric"><small>STREAK</small><strong>${state.profile.streak} days</strong><span>Honest replanning counts</span></article><article class="metric accent"><small>MOMENTUM</small><strong>${state.profile.xp} XP</strong><span>Level ${level}</span></article></section>
+    <div class="today-flow">
+      ${nowTask ? `<article class="now-card"><div><p class="eyebrow">NOW · RECOMMENDED NEXT ACTION</p><h2>${esc(nowTask.title)}</h2><p>${duration(Math.round(nowTask.duration*(1-nowTask.progress/100)))} remaining · ${nowTask.energy} energy · ${nowTask.progress}% complete</p><p class="next-action">Next: ${esc(nowTask.next||'Define the first physical action')}</p></div><div class="now-actions"><button class="defer" data-rescue-open="${nowTask.id}">Not now</button><button class="start-now" data-start-now="${nowTask.id}">▶ Start focus</button></div></article>` : `<div class="empty"><b>Nothing is demanding your attention.</b>Enjoy the open space or capture what matters.</div>`}
+      <div class="today-columns"><section class="attention-section"><div class="section-title"><div><h2>Next</h2><p>The next visible commitments, in order.</p></div><button class="ghost-btn" data-view="planner">Timeline →</button></div>${next.length?next.map(t=>compactTask(t)).join(''):'<div class="empty"><b>No next commitment.</b>Your schedule has room.</div>'}<div class="mini-timeline">${[8,11,14,17,20,22].map(h=>`<div class="mini-hour"><span>${h>12?h-12:h}${h>=12?'p':'a'}</span><i class="${scheduled.some(t=>mins(t.start)>=h*60&&mins(t.start)<(h+3)*60)?'busy':'open'}"></i></div>`).join('')}</div></section>
+      <section class="attention-section danger"><div class="section-title"><div><h2>At risk</h2><p>These can be missed unless you decide.</p></div></div>${risk.length?risk.map(t=>compactTask(t,'risk')).join(''):'<div class="empty"><b>Nothing at risk.</b>Your commitments are covered.</div>'}</section></div>
+      <section class="attention-section flexible"><div class="section-title"><div><h2>Unscheduled today</h2><p>Belongs today, but has no hour. These never disappear into a list.</p></div><button class="ghost-btn" data-view="planner">Place on timeline →</button></div>${unscheduled.length?unscheduled.map(t=>compactTask(t,'flex')).join(''):'<div class="empty"><b>Every task has a home.</b>No floating commitments today.</div>'}</section>
     </div>`;
 }
 
@@ -141,6 +150,16 @@ function inboxView() {
     <aside class="triage-card"><p class="eyebrow">60-SECOND TRIAGE</p><h3>Ask only what matters.</h3><p>Every capture should become a clear action, a scheduled commitment, a waiting item or something you consciously release.</p><div class="triage-steps"><span><b>01</b> What does “done” mean?</span><span><b>02</b> What is the smallest next action?</span><span><b>03</b> Does it need time or only a deadline?</span><span><b>04</b> Which part of your life owns it?</span></div></aside></div>`;
 }
 
+function allView() {
+  const query = (ui.allQuery || '').toLowerCase();
+  const open = state.tasks.filter(t => t.progress < 100).filter(t => !query || [t.title,t.area,t.category,t.next].some(v=>String(v||'').toLowerCase().includes(query)));
+  const groups = ['Career','Personal','Growth'];
+  return `${pageHead('THE GUARANTEED ESCAPE HATCH', `Every open task.<br><em>No hidden corners.</em>`, `<button class="primary" data-open="taskModal">+ Capture</button>`)}
+    <div class="all-toolbar"><input id="allSearch" value="${esc(ui.allQuery||'')}" placeholder="Filter every task by title, area, category or next action…"><span class="all-summary">${open.length} visible · ${state.tasks.filter(t=>t.progress>=100).length} completed</span></div>
+    <div class="status-legend"><span><i style="background:var(--coral)"></i>At risk</span><span><i style="background:var(--violet)"></i>Flexible or undecided</span><span><i style="background:var(--lime)"></i>Ready to act</span><span><i style="background:#a4a8a4"></i>Inbox</span></div>
+    ${groups.map(area=>{const items=open.filter(t=>t.area===area);return `<section class="all-group"><div class="all-group-head"><h2><span class="mini-dot" style="background:${color(area)}"></span> ${area}</h2><span>${items.length} open</span></div><div class="task-list">${items.length?items.map(taskCard).join(''):'<div class="empty"><b>No matching tasks.</b>This area is clear.</div>'}</div></section>`}).join('')}`;
+}
+
 function requestCard(r) {
   return `<article class="request-card ${r.status !== 'pending' ? 'resolved' : ''}" data-request="${r.id}"><div class="request-head"><div class="request-person"><span class="person-avatar">${r.initials}</span><div><h3>${esc(r.name)}</h3><p>${dateLabel(r.date)} · ${clock(mins(r.start))} · ${duration(r.duration)}</p></div></div><span class="pending-pill">${r.status.toUpperCase()}</span></div><div class="request-purpose">${esc(r.purpose)}</div><p class="request-note">${esc(r.note)}</p><div class="request-facts"><div><small>EXPECTED RESULT</small><b>${esc(r.outcome)}</b></div><div><small>URGENCY</small><b>${esc(r.urgency)}</b></div><div><small>FLEXIBILITY</small><b>${esc(r.flexibility)}</b></div><div><small>TIME ASKED</small><b>${duration(r.duration)}</b></div></div><div class="impact-box ${r.safe ? 'safe' : ''}"><b>${r.safe ? '✓ Fits your plan: ' : '⚠ Scheduling impact: '}</b>${esc(r.impact)}</div><div class="request-actions"><button class="accept" data-request-action="accept">Approve + create plan</button><button data-request-action="shorten">Offer 30 minutes</button><button data-request-action="reject">Decline</button></div></article>`;
 }
@@ -171,12 +190,13 @@ function insightsView() {
 }
 
 function render() {
-  const renderers = { today: todayView, planner: plannerView, inbox: inboxView, requests: requestsView, share: shareView, insights: insightsView };
-  $('#app').innerHTML = (renderers[ui.view] || todayView)();
+  const renderers = { today: todayView, planner: plannerView, inbox: inboxView, all: allView, requests: requestsView, share: shareView, insights: insightsView };
+  $('#app').innerHTML = attentionRail() + (renderers[ui.view] || todayView)();
   $$('.nav-item,.mobile-nav button[data-view]').forEach(b => b.classList.toggle('active', b.dataset.view === ui.view));
   const todayOpen = state.tasks.filter(t => t.date === iso() && t.progress < 100).length;
   $('#todayCount').textContent = todayOpen; $('#plannerCount').textContent = state.tasks.filter(t => t.date === ui.planningDate && t.progress < 100).length;
   $('#inboxCount').textContent = state.tasks.filter(t => t.plan === 'inbox' && t.progress < 100).length;
+  $('#allCount').textContent = state.tasks.filter(t => t.progress < 100).length;
   $('#requestCount').textContent = state.requests.filter(r => r.status === 'pending').length;
   ['Career','Personal','Growth'].forEach(a => $(`#${a.toLowerCase()}Count`).textContent = state.tasks.filter(t => t.area === a && t.progress < 100).length);
 }
@@ -219,10 +239,21 @@ function visitorPreview() {
   openModal('shareModal');
 }
 
+function renderSearchResults(query = '') {
+  const q = query.trim().toLowerCase();
+  const results = state.tasks.filter(t => !q || [t.title,t.area,t.category,t.next].some(v=>String(v||'').toLowerCase().includes(q))).slice(0,10);
+  $('#searchResults').innerHTML = results.length ? results.map(t=>`<button class="search-result" data-search-task="${t.id}"><i class="state-edge ${t.postponed>=2?'risk':t.plan==='window'?'flex':''}"></i><div><b>${esc(t.title)}</b><small>${esc(t.area)} / ${esc(t.category)} · ${t.progress}% complete${t.date?` · ${dateLabel(t.date)}`:' · Inbox'}</small></div><span>→</span></button>`).join('') : '<div class="empty"><b>No matching task.</b>Try a category, next action or different phrase.</div>';
+}
+function openSearch() { openModal('searchModal'); $('#globalSearch').value=''; renderSearchResults(); setTimeout(()=>$('#globalSearch').focus(),80); }
+
 document.addEventListener('click', event => {
   const view = event.target.closest('[data-view]'); if (view) { event.preventDefault(); setView(view.dataset.view); return; }
   const opener = event.target.closest('[data-open]'); if (opener) { openModal(opener.dataset.open); return; }
   const closer = event.target.closest('[data-close]'); if (closer) { closeModal(closer.dataset.close); return; }
+  if (event.target.closest('[data-attention-open]')) { setView('all'); return; }
+  const startNow = event.target.closest('[data-start-now]'); if (startNow) { const task=state.tasks.find(t=>t.id===Number(startNow.dataset.startNow)); if(task) startTimer(task); return; }
+  const placeTask = event.target.closest('[data-place-task]'); if (placeTask) { const task=state.tasks.find(t=>t.id===Number(placeTask.dataset.placeTask)); if(task) ui.planningDate=task.date||iso(); setView('planner'); return; }
+  const searchTask = event.target.closest('[data-search-task]'); if(searchTask){const task=state.tasks.find(t=>t.id===Number(searchTask.dataset.searchTask));ui.allQuery=task?.title||'';closeModal('searchModal');setView('all');return;}
   const taskEl = event.target.closest('[data-task]');
   if (taskEl) {
     const task = state.tasks.find(t => t.id === Number(taskEl.dataset.task)); if (!task) return;
@@ -262,10 +293,15 @@ document.addEventListener('click', event => {
   if (event.target.closest('[data-submit-demo-request]')) { closeModal('shareModal'); toast('Request submitted','It would now appear in your approval inbox.'); return; }
 });
 
-document.addEventListener('input', event => { if (event.target.matches('[data-progress]')) event.target.nextElementSibling.textContent = `${event.target.value}%`; });
+document.addEventListener('input', event => {
+  if (event.target.matches('[data-progress]')) event.target.nextElementSibling.textContent = `${event.target.value}%`;
+  if (event.target.id === 'globalSearch') renderSearchResults(event.target.value);
+  if (event.target.id === 'allSearch') { ui.allQuery = event.target.value; const caret=event.target.selectionStart; render(); const next=$('#allSearch'); next.focus(); next.setSelectionRange(caret,caret); }
+});
 document.addEventListener('change', event => { if (event.target.matches('[data-progress]')) updateProgress(Number(event.target.closest('[data-task]').dataset.task), event.target.value); });
 
 $('#captureTrigger').addEventListener('click',()=>openModal('taskModal')); $('#mobileAdd').addEventListener('click',()=>openModal('taskModal'));
+$('#searchTrigger').addEventListener('click',openSearch); $('#mobileSearch').addEventListener('click',openSearch);
 $$('[data-view]').forEach(control => control.addEventListener('click', event => { event.preventDefault(); setView(control.dataset.view); }));
 $('#menuBtn').addEventListener('click',()=>$('#sidebar').classList.toggle('open'));
 $('#focusBtn').addEventListener('click',()=>{document.body.classList.toggle('focus-mode');toast(document.body.classList.contains('focus-mode')?'Focus mode on':'Focus mode off');});
@@ -280,7 +316,7 @@ $('#timerToggle').addEventListener('click',()=>{if(!ui.timer)return;ui.timer.run
 $('#timerStop').addEventListener('click',finishTimer); $('#timerClose').addEventListener('click',closeTimer);
 $('#resetBtn').addEventListener('click',()=>{state=clone(seed);save();ui={view:'today',space:null,category:null,planningDate:iso(),rescueId:null,timer:null};closeTimer();render();toast('Demo restored','All sample data is back.');});
 $$('.modal-layer').forEach(layer=>layer.addEventListener('click',e=>{if(e.target===layer)closeModal(layer.id);}));
-document.addEventListener('keydown',e=>{if((e.key==='c'||e.key==='C')&&!['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName))openModal('taskModal');if(e.key==='Escape')$$('.modal-layer.open').forEach(m=>closeModal(m.id));});
+document.addEventListener('keydown',e=>{const typing=['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName);if((e.key==='c'||e.key==='C')&&!typing)openModal('taskModal');if(e.key==='/'&&!typing){e.preventDefault();openSearch();}if(e.key==='Escape')$$('.modal-layer.open').forEach(m=>closeModal(m.id));});
 
 const now=new Date();$('#dateDay').textContent=now.getDate();$('#dateMonth').textContent=now.toLocaleDateString('en-US',{month:'short'}).toUpperCase();$('#taskDate').value=iso();$('#taskDate').min=iso();$('#decideBy').value=iso();$('#freeDate').value=iso(addDays(1));$('#freeDate').min=iso();
 if(location.hash.startsWith('#invite=')){setTimeout(visitorPreview,100);} render();
