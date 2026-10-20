@@ -1,0 +1,1 @@
+CREATE TABLE user_state (user_id TEXT PRIMARY KEY NOT NULL, email TEXT NOT NULL DEFAULT '', display_name TEXT NOT NULL DEFAULT '', payload TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL);

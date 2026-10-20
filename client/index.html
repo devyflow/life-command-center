@@ -28,6 +28,7 @@
       <p class="eyebrow">TOOLS</p>
       <button class="nav-item" data-view="share"><span>◎</span><b>Share time</b></button>
       <button class="nav-item" data-view="insights"><span>↗</span><b>Insights</b></button>
+      <button class="nav-item" id="reminderBtn"><span>◷</span><b>Browser reminders</b><i id="reminderState">Off</i></button>
     </nav>
     <div class="space-tree">
       <p class="eyebrow">MY LIFE</p>
@@ -37,7 +38,7 @@
       <div class="tree-children"><button data-category="Health">Health</button><button data-category="Home">Home</button></div>
       <button class="space-row" data-space="Growth"><span class="space-dot lime"></span><b>Growth</b><i id="growthCount">0</i></button>
     </div>
-    <div class="sidebar-foot"><div class="avatar">A</div><div><b>Your command center</b><small>Saved on this device</small></div><button class="bare" id="resetBtn" title="Reset demo">↻</button></div>
+    <div class="sidebar-foot"><div class="avatar" id="accountAvatar">A</div><div><b id="accountName">Your command center</b><small id="syncStatus">Connecting to cloud…</small></div><button class="bare" id="resetBtn" title="Reset demo">↻</button></div>
   </aside>
 
   <main>
@@ -73,6 +74,7 @@
           <label>Energy<select id="taskEnergy"><option value="low">Low</option><option value="medium" selected>Medium</option><option value="high">High</option></select></label>
           <label>Plan type<select id="taskPlan"><option value="inbox">Decide later</option><option value="today">Today, flexible time</option><option value="fixed">Fixed time</option><option value="window">Flexible window</option></select></label>
           <label>Date<input id="taskDate" type="date"></label>
+          <label>Repeat<select id="taskRepeat"><option value="none">Does not repeat</option><option value="daily">Every day</option><option value="weekly">Every week</option><option value="monthly">Every month</option></select></label>
           <label>Earliest time<input id="taskStart" type="time" value="10:00"></label>
           <label>Latest time<input id="taskEnd" type="time" value="18:00"></label>
           <label>Decide exact time by<input id="decideBy" type="date"></label>
@@ -80,7 +82,7 @@
         </div>
         <div class="capture-marks"><span>Paper meaning</span><label><input id="taskCircle" type="checkbox"> ◯ Important</label><label><input id="taskReady" type="checkbox"> ✓ Ready to act</label><label><input id="taskBox" type="checkbox"> □ Protect this time</label><label><input id="taskStar" type="checkbox"> ★ Today focus</label></div>
         <div class="choice-row"><label><input id="taskTimer" type="checkbox" checked> Add focus timer</label><label><input id="taskPublish" type="checkbox"> Show on shared calendar</label><label><input id="taskCalendar" type="checkbox"> Add to calendar when scheduled</label></div>
-        <footer class="modal-actions"><span>Nothing has to be perfect yet.</span><button class="primary" type="submit">Capture task →</button></footer>
+        <footer class="modal-actions"><span>Nothing has to be perfect yet.</span><div><button class="danger-button" type="button" id="taskDelete" hidden>Delete task</button><button class="primary" type="submit" id="taskSubmit">Capture task →</button></div></footer>
       </form>
     </div>
   </div>
@@ -111,7 +113,7 @@
   <div class="timer-dock" id="timerDock"><button class="timer-ring" id="timerToggle">▶</button><div><small>FOCUSING ON</small><strong id="timerTask">Task</strong></div><time id="timerTime">25:00</time><button class="timer-stop" id="timerStop">Finish session</button><button class="bare" id="timerClose">×</button></div>
   <div class="toast" id="toast"><span>✓</span><div><b id="toastTitle">Saved</b><small id="toastText">Your change is ready.</small></div></div>
   <div class="xp-burst" id="xpBurst"><span>✦</span><b id="xpBurstValue">+10 XP</b><small id="xpBurstText">Momentum earned</small></div>
-  <script src="app.js?v=semantic-paper-v1"></script>
-  <script type="module" src="scene.js?v=semantic-paper-v1"></script>
+  <script src="app.js?v=cloud-foundation-v1"></script>
+  <script type="module" src="scene.js?v=cloud-foundation-v1"></script>
 </body>
 </html>

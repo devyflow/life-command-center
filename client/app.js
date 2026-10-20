@@ -44,12 +44,84 @@ const clone = obj => JSON.parse(JSON.stringify(obj));
 let state = (() => { try { return { ...clone(seed), ...JSON.parse(localStorage.getItem(STORE) || '{}') }; } catch { return clone(seed); } })();
 let ui = { view: 'today', space: null, category: null, planningDate: iso(), rescueId: null, timer: null, taskFilter: 'open' };
 let timerHandle = null;
+let sync = { ready: false, revision: 0, dirty: false, saving: false, timer: null, user: null };
 state.paper ||= { title: 'Everything on my mind', strokes: [], shapes: [], texts: [{ id: 9001, x: 7.5, y: 11.5, text: 'Do what matters. Leave room to breathe.', type: 'note' }], layout: {}, sequence: [] };
 state.paper.strokes ||= []; state.paper.shapes ||= []; state.paper.texts ||= []; state.paper.layout ||= {}; state.paper.sequence ||= [];
+state.preferences ||= { reminders: false, reminderLead: 10, notified: {} };
 state.tasks.forEach(task => {
   task.paperMarks ||= { circle: task.paperEmphasis === 'circle', tick: false, box: task.paperEmphasis === 'box', star: task.paperEmphasis === 'star' };
+  task.repeat ||= 'none';
 });
-const save = () => localStorage.setItem(STORE, JSON.stringify(state));
+function setSyncStatus(text, mode = '') {
+  const el = $('#syncStatus'); if (!el) return; el.textContent = text; el.dataset.mode = mode;
+}
+function saveLocal() { localStorage.setItem(STORE, JSON.stringify(state)); }
+function save() {
+  state.meta = { ...(state.meta || {}), updatedAt: new Date().toISOString() };
+  saveLocal();
+  if (!sync.ready) return;
+  sync.dirty = true; setSyncStatus('Saving changes…', 'saving');
+  clearTimeout(sync.timer); sync.timer = setTimeout(pushCloudState, 550);
+}
+async function pushCloudState(force = false) {
+  if (!sync.ready || sync.saving || !sync.dirty) return;
+  sync.saving = true;
+  try {
+    const response = await fetch('/api/state', { method:'PUT', headers:{'content-type':'application/json'}, body:JSON.stringify({ state, baseRevision:sync.revision, force }) });
+    const result = await response.json();
+    if (response.status === 409) {
+      const localTime = Date.parse(state.meta?.updatedAt || 0), remoteTime = Date.parse(result.state?.meta?.updatedAt || 0);
+      if (remoteTime > localTime) { state = result.state; sync.revision = result.revision; sync.dirty = false; saveLocal(); render(); toast('Newer cloud changes loaded','This browser is now up to date.'); }
+      else { sync.revision = result.revision; sync.saving = false; return pushCloudState(true); }
+    } else if (!response.ok) throw new Error(result.error || 'Cloud save failed');
+    else { sync.revision = result.revision; sync.dirty = false; setSyncStatus('Cloud synced', 'synced'); }
+  } catch { setSyncStatus('Offline · saved in browser', 'offline'); }
+  finally { sync.saving = false; }
+}
+async function pullCloudState() {
+  if (!sync.ready || sync.dirty || document.hidden) return;
+  try {
+    const response = await fetch('/api/state', { cache:'no-store' }); if (!response.ok) return;
+    const result = await response.json();
+    if (result.state && result.revision > sync.revision) { state = result.state; sync.revision = result.revision; saveLocal(); render(); setSyncStatus('Updated from cloud','synced'); }
+  } catch {}
+}
+async function initializeCloud() {
+  try {
+    const [sessionResponse,stateResponse] = await Promise.all([fetch('/api/session',{cache:'no-store'}),fetch('/api/state',{cache:'no-store'})]);
+    if (!sessionResponse.ok || !stateResponse.ok) throw new Error('Authentication unavailable');
+    const session = await sessionResponse.json(), remote = await stateResponse.json();
+    sync.user = session.user; sync.revision = remote.revision || 0;
+    $('#accountName').textContent = session.user.name || session.user.email || 'Your command center';
+    $('#accountAvatar').textContent = (session.user.name || session.user.email || 'A').trim().charAt(0).toUpperCase();
+    if (remote.state) { state = remote.state; state.preferences ||= { reminders:false, reminderLead:10, notified:{} }; state.tasks.forEach(t=>{t.paperMarks||={circle:false,tick:false,box:false,star:false};t.repeat||='none';}); saveLocal(); render(); updateReminderUI(); }
+    sync.ready = true; setSyncStatus('Cloud synced','synced');
+    if (!remote.state) { sync.dirty = true; await pushCloudState(); }
+    setInterval(pullCloudState, 15000);
+  } catch { setSyncStatus('Browser storage · reconnecting','offline'); setTimeout(initializeCloud, 12000); }
+}
+function updateReminderUI() {
+  const on = Boolean(state.preferences?.reminders && 'Notification' in window && Notification.permission === 'granted');
+  $('#reminderState').textContent = on ? 'On' : 'Off'; $('#reminderBtn').classList.toggle('active', on);
+}
+async function toggleReminders() {
+  if (!('Notification' in window)) { toast('Reminders unavailable','This browser does not support notifications.'); return; }
+  if (state.preferences.reminders) { state.preferences.reminders=false; save(); updateReminderUI(); toast('Browser reminders paused'); return; }
+  const permission = await Notification.requestPermission();
+  state.preferences.reminders = permission === 'granted'; save(); updateReminderUI();
+  toast(state.preferences.reminders?'Browser reminders enabled':'Permission was not granted',state.preferences.reminders?'Scheduled tasks can alert you while the website is open.':'You can change notification permission in your browser settings.');
+}
+function scanReminders() {
+  if (!state.preferences?.reminders || !('Notification' in window) || Notification.permission !== 'granted') return;
+  const now = new Date(), lead = Number(state.preferences.reminderLead || 10);
+  state.tasks.filter(t=>t.progress<100&&t.date&&t.start).forEach(task=>{
+    const due = new Date(`${task.date}T${task.start}:00`), minutes=(due-now)/60000, key=`${task.id}:${task.date}:${task.start}`;
+    if(minutes<=lead&&minutes>=-5&&!state.preferences.notified[key]){
+      new Notification(task.title,{body:`${minutes<=0?'Scheduled now':`Starts in ${Math.ceil(minutes)} minutes`} · ${task.next||'Open Life Command Center'}`,tag:key});
+      state.preferences.notified[key]=new Date().toISOString(); save();
+    }
+  });
+}
 
 const hasMark = (task, mark) => Boolean(task.paperMarks?.[mark]);
 function matchesTaskFilter(task) {
@@ -95,8 +167,8 @@ function taskCard(task) {
   const marked = Object.values(task.paperMarks || {}).some(Boolean);
   return `<article class="task-row ${done ? 'done' : ''} ${marked ? 'paper-important' : ''}" data-task="${task.id}">
     <button class="task-check" data-action="complete" aria-label="${done ? 'Mark incomplete' : 'Complete task'}">${done ? '✓' : ''}</button>
-    <div><div class="task-title">${esc(task.title)}</div><div class="task-meta"><span class="mini-dot" style="background:${color(task.area)}"></span>${esc(task.area)} / ${esc(task.category)} · ${duration(task.duration)} <span class="energy">${task.energy}</span>${task.start ? ` · ${clock(mins(task.start))}` : ''}${order>=0?` <span class="paper-order">Paper #${order+1}</span>`:''}</div>${taskMarkButtons(task)}</div>
-    <div class="task-side"><button class="icon-action" data-action="timer" title="Start timer">◷</button><button class="icon-action" data-action="calendar" title="Export calendar event">▣</button><button class="icon-action" data-action="publish" title="${task.publish ? 'Remove from shared calendar' : 'Show on shared calendar'}">${task.publish ? '●' : '○'}</button></div>
+    <div><div class="task-title">${esc(task.title)}</div><div class="task-meta"><span class="mini-dot" style="background:${color(task.area)}"></span>${esc(task.area)} / ${esc(task.category)} · ${duration(task.duration)} <span class="energy">${task.energy}</span>${task.start ? ` · ${clock(mins(task.start))}` : ''}${task.repeat&&task.repeat!=='none'?` · repeats ${task.repeat}`:''}${order>=0?` <span class="paper-order">Paper #${order+1}</span>`:''}</div>${taskMarkButtons(task)}</div>
+    <div class="task-side"><button class="icon-action" data-action="edit" title="Edit task">✎</button><button class="icon-action" data-action="timer" title="Start timer">◷</button><button class="icon-action" data-action="calendar" title="Export calendar event">▣</button><button class="icon-action" data-action="publish" title="${task.publish ? 'Remove from shared calendar' : 'Show on shared calendar'}">${task.publish ? '●' : '○'}</button></div>
     <label class="progress-line"><input type="range" min="0" max="100" step="5" value="${task.progress}" data-progress><span>${task.progress}%</span></label>
     ${task.next ? `<div class="next-step">Next: ${esc(task.next)}</div>` : ''}
   </article>`;
@@ -288,12 +360,26 @@ function render() {
 }
 
 function setView(view) { ui.view = view; if (view !== 'inbox') { ui.space = null; ui.category = null; } render(); $('#sidebar').classList.remove('open'); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+function nextRecurringDate(task) {
+  const base = new Date(`${task.date || iso()}T12:00:00`);
+  if (task.repeat === 'daily') base.setDate(base.getDate() + 1);
+  if (task.repeat === 'weekly') base.setDate(base.getDate() + 7);
+  if (task.repeat === 'monthly') base.setMonth(base.getMonth() + 1);
+  return iso(base);
+}
+function spawnRecurringTask(task) {
+  if (!task.repeat || task.repeat === 'none' || task.recurrenceSpawned) return;
+  task.recurrenceSpawned = true;
+  const next = { ...clone(task), id:uid(), date:nextRecurringDate(task), progress:0, recurrenceSpawned:false, createdAt:new Date().toISOString(), updatedAt:new Date().toISOString() };
+  state.tasks.push(next);
+  toast('Next recurring task created', `${next.title} is scheduled for ${dateLabel(next.date)}.`);
+}
 function updateProgress(id, value) {
   const task = state.tasks.find(t => t.id === id); if (!task) return;
   const old = task.progress; task.progress = Number(value);
   const crossed = Math.floor(task.progress / 25) - Math.floor(old / 25);
   if (crossed > 0) reward(crossed * 10 + (task.progress === 100 ? 20 : 0), task.progress === 100 ? 'Completion with context preserved' : 'Honest progress counts');
-  if (task.progress === 100 && old < 100) { setProductive(); toast('Task complete', 'Your remaining workload has been recalculated.'); }
+  if (task.progress === 100 && old < 100) { setProductive(); spawnRecurringTask(task); if(!task.repeat||task.repeat==='none')toast('Task complete', 'Your remaining workload has been recalculated.'); }
   save(); render();
 }
 function startTimer(task) {
@@ -332,6 +418,27 @@ function renderSearchResults(query = '') {
 }
 function openSearch() { openModal('searchModal'); $('#globalSearch').value=''; renderSearchResults(); setTimeout(()=>$('#globalSearch').focus(),80); }
 
+const TASK_CATEGORIES = { Career:['College','DSA','Meetings','Projects'], Personal:['Health','Home','Relationships'], Growth:['Learning','Reading','Skills'] };
+function setTaskCategories(area, selected = '') {
+  $('#taskCategory').innerHTML = TASK_CATEGORIES[area].map(x=>`<option ${x===selected?'selected':''}>${x}</option>`).join('');
+}
+function openTaskEditor(task = null) {
+  ui.editTaskId = task?.id || null;
+  const form = $('#taskForm'); form.reset();
+  $('#taskModalTitle').textContent = task ? 'Edit the commitment.' : 'Give it a place.';
+  $('#taskSubmit').textContent = task ? 'Save changes →' : 'Capture task →';
+  $('#taskDelete').hidden = !task;
+  $('#taskTitle').value = task?.title || '';
+  $('#taskArea').value = task?.area || 'Career'; setTaskCategories($('#taskArea').value, task?.category || 'College');
+  $('#taskDuration').value = String(task?.duration || 60); $('#taskEnergy').value = task?.energy || 'medium';
+  $('#taskPlan').value = task?.plan || 'inbox'; $('#taskDate').min = task?.date && task.date < iso() ? task.date : iso(); $('#taskDate').value = task?.date || iso();
+  $('#taskRepeat').value = task?.repeat || 'none'; $('#taskStart').value = task?.start || task?.windowStart || '10:00';
+  $('#taskEnd').value = task?.windowEnd || '18:00'; $('#decideBy').value = task?.decideBy || iso(); $('#taskNext').value = task?.next || '';
+  $('#taskTimer').checked = task ? Boolean(task.timer) : true; $('#taskPublish').checked = Boolean(task?.publish); $('#taskCalendar').checked = Boolean(task?.calendar);
+  $('#taskCircle').checked = hasMark(task || {},'circle'); $('#taskReady').checked = hasMark(task || {},'tick'); $('#taskBox').checked = hasMark(task || {},'box'); $('#taskStar').checked = hasMark(task || {},'star');
+  openModal('taskModal'); setTimeout(()=>$('#taskTitle').focus(),80);
+}
+
 let paperRuntime = { tool: 'select', stroke: null, shape: null, drag: null };
 function drawPaperCanvas(preview = null) {
   const canvas=$('#paperCanvas'); if(!canvas) return; const ctx=canvas.getContext('2d');
@@ -368,7 +475,7 @@ function initPaperBoard() {
 document.addEventListener('click', event => {
   const view = event.target.closest('[data-view]'); if (view) { event.preventDefault(); setView(view.dataset.view); return; }
   const taskFilter = event.target.closest('[data-task-filter]'); if (taskFilter) { ui.taskFilter = taskFilter.dataset.taskFilter; render(); return; }
-  const opener = event.target.closest('[data-open]'); if (opener) { openModal(opener.dataset.open); return; }
+  const opener = event.target.closest('[data-open]'); if (opener) { opener.dataset.open==='taskModal'?openTaskEditor():openModal(opener.dataset.open); return; }
   const closer = event.target.closest('[data-close]'); if (closer) { closeModal(closer.dataset.close); return; }
   if (event.target.closest('[data-attention-open]')) { setView('all'); return; }
   const startNow = event.target.closest('[data-start-now]'); if (startNow) { const task=state.tasks.find(t=>t.id===Number(startNow.dataset.startNow)); if(task) startTimer(task); return; }
@@ -382,6 +489,7 @@ document.addEventListener('click', event => {
   if (taskEl) {
     const task = state.tasks.find(t => t.id === Number(taskEl.dataset.task)); if (!task) return;
     if (event.target.closest('[data-action="complete"]')) updateProgress(task.id, task.progress >= 100 ? 0 : 100);
+    else if (event.target.closest('[data-action="edit"]')) openTaskEditor(task);
     else if (event.target.closest('[data-action="timer"]')) startTimer(task);
     else if (event.target.closest('[data-action="calendar"]')) exportICS(task);
     else if (event.target.closest('[data-action="publish"]')) { task.publish = !task.publish; save(); render(); toast(task.publish ? 'Visible with privacy' : 'Removed from shared view', task.publish ? 'Visitors see only its public label.' : 'This task is private again.'); }
@@ -424,23 +532,28 @@ document.addEventListener('input', event => {
 });
 document.addEventListener('change', event => { if (event.target.matches('[data-progress]')) updateProgress(Number(event.target.closest('[data-task]').dataset.task), event.target.value); });
 
-$('#captureTrigger').addEventListener('click',()=>openModal('taskModal')); $('#mobileAdd').addEventListener('click',()=>openModal('taskModal'));
+$('#captureTrigger').addEventListener('click',()=>openTaskEditor()); $('#mobileAdd').addEventListener('click',()=>openTaskEditor());
 $('#searchTrigger').addEventListener('click',openSearch); $('#mobileSearch').addEventListener('click',openSearch);
 $$('[data-view]').forEach(control => control.addEventListener('click', event => { event.preventDefault(); setView(control.dataset.view); }));
 $('#menuBtn').addEventListener('click',()=>$('#sidebar').classList.toggle('open'));
 $('#focusBtn').addEventListener('click',()=>{document.body.classList.toggle('focus-mode');toast(document.body.classList.contains('focus-mode')?'Focus mode on':'Focus mode off');});
-$('#taskArea').addEventListener('change',()=>{const map={Career:['College','DSA','Meetings','Projects'],Personal:['Health','Home','Relationships'],Growth:['Learning','Reading','Skills']};$('#taskCategory').innerHTML=map[$('#taskArea').value].map(x=>`<option>${x}</option>`).join('');});
+$('#reminderBtn').addEventListener('click',toggleReminders);
+$('#taskArea').addEventListener('change',()=>setTaskCategories($('#taskArea').value));
 $('#taskForm').addEventListener('submit', event => {
   event.preventDefault(); const plan=$('#taskPlan').value, date=$('#taskDate').value || (plan==='inbox'?null:iso());
-  state.tasks.unshift({id:uid(),title:$('#taskTitle').value.trim(),area:$('#taskArea').value,category:$('#taskCategory').value,duration:Number($('#taskDuration').value),energy:$('#taskEnergy').value,plan,date,start:plan==='fixed'?$('#taskStart').value:null,windowStart:$('#taskStart').value,windowEnd:$('#taskEnd').value,decideBy:$('#decideBy').value||iso(),progress:0,next:$('#taskNext').value.trim(),timer:$('#taskTimer').checked,publish:$('#taskPublish').checked,publicTitle:'Focused work',calendar:$('#taskCalendar').checked,postponed:0,paperMarks:{circle:$('#taskCircle').checked,tick:$('#taskReady').checked,box:$('#taskBox').checked,star:$('#taskStar').checked}});
-  save(); event.target.reset(); $('#taskStart').value='10:00';$('#taskEnd').value='18:00';closeModal('taskModal');reward(5,'Your mind can release the task');toast('Captured','The task is safely in your command center.');render();
+  const values={title:$('#taskTitle').value.trim(),area:$('#taskArea').value,category:$('#taskCategory').value,duration:Number($('#taskDuration').value),energy:$('#taskEnergy').value,plan,date:plan==='inbox'?null:date,start:plan==='fixed'?$('#taskStart').value:null,windowStart:$('#taskStart').value,windowEnd:$('#taskEnd').value,decideBy:$('#decideBy').value||iso(),next:$('#taskNext').value.trim(),timer:$('#taskTimer').checked,publish:$('#taskPublish').checked,publicTitle:'Focused work',calendar:$('#taskCalendar').checked,repeat:$('#taskRepeat').value,paperMarks:{circle:$('#taskCircle').checked,tick:$('#taskReady').checked,box:$('#taskBox').checked,star:$('#taskStar').checked},updatedAt:new Date().toISOString()};
+  const existing=state.tasks.find(t=>t.id===ui.editTaskId);
+  if(existing){Object.assign(existing,values);toast('Task updated','Paper, planner and task views now use the changes.');}
+  else{state.tasks.unshift({id:uid(),progress:0,postponed:0,createdAt:new Date().toISOString(),...values});reward(5,'Your mind can release the task');toast('Captured','The task is safely in your command center and cloud.');}
+  save(); ui.editTaskId=null; closeModal('taskModal'); render();
 });
+$('#taskDelete').addEventListener('click',()=>{const id=ui.editTaskId;if(!id)return;state.tasks=state.tasks.filter(t=>t.id!==id);delete state.paper.layout[id];state.paper.sequence=state.paper.sequence.filter(x=>x!==id);ui.editTaskId=null;save();closeModal('taskModal');render();toast('Task deleted','It was removed from Paper and every task view.');});
 $('#freeForm').addEventListener('submit',event=>{event.preventDefault();state.availability.push({id:uid(),date:$('#freeDate').value,start:$('#freeStart').value,end:$('#freeEnd').value,label:$('#freeLabel').value,max:Number($('#freeMax').value)});save();closeModal('freeModal');toast('Free time published','Visitors can request this window, subject to approval.');render();});
 $('#timerToggle').addEventListener('click',()=>{if(!ui.timer)return;ui.timer.running=!ui.timer.running;$('#timerToggle').textContent=ui.timer.running?'Ⅱ':'▶';});
 $('#timerStop').addEventListener('click',finishTimer); $('#timerClose').addEventListener('click',closeTimer);
-$('#resetBtn').addEventListener('click',()=>{state=clone(seed);state.tasks.forEach(task=>task.paperMarks={circle:false,tick:false,box:false,star:false});state.paper={title:'Everything on my mind',strokes:[],shapes:[],texts:[{id:9001,x:7.5,y:11.5,text:'Do what matters. Leave room to breathe.',type:'note'}],layout:{},sequence:[]};save();ui={view:'today',space:null,category:null,planningDate:iso(),rescueId:null,timer:null,taskFilter:'open'};closeTimer();render();toast('Demo restored','All sample data is back.');});
+$('#resetBtn').addEventListener('click',()=>{state=clone(seed);state.tasks.forEach(task=>{task.paperMarks={circle:false,tick:false,box:false,star:false};task.repeat='none';});state.paper={title:'Everything on my mind',strokes:[],shapes:[],texts:[{id:9001,x:7.5,y:11.5,text:'Do what matters. Leave room to breathe.',type:'note'}],layout:{},sequence:[]};state.preferences={reminders:false,reminderLead:10,notified:{}};save();ui={view:'today',space:null,category:null,planningDate:iso(),rescueId:null,timer:null,taskFilter:'open'};closeTimer();render();updateReminderUI();toast('Demo restored','All sample data is back.');});
 $$('.modal-layer').forEach(layer=>layer.addEventListener('click',e=>{if(e.target===layer)closeModal(layer.id);}));
-document.addEventListener('keydown',e=>{const typing=['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName);if((e.key==='c'||e.key==='C')&&!typing)openModal('taskModal');if(e.key==='/'&&!typing){e.preventDefault();openSearch();}if(e.key==='Escape')$$('.modal-layer.open').forEach(m=>closeModal(m.id));});
+document.addEventListener('keydown',e=>{const typing=['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName);if((e.key==='c'||e.key==='C')&&!typing)openTaskEditor();if(e.key==='/'&&!typing){e.preventDefault();openSearch();}if(e.key==='Escape')$$('.modal-layer.open').forEach(m=>closeModal(m.id));});
 
 const now=new Date();$('#dateDay').textContent=now.getDate();$('#dateMonth').textContent=now.toLocaleDateString('en-US',{month:'short'}).toUpperCase();$('#taskDate').value=iso();$('#taskDate').min=iso();$('#decideBy').value=iso();$('#freeDate').value=iso(addDays(1));$('#freeDate').min=iso();
-if(location.hash.startsWith('#invite=')){setTimeout(visitorPreview,100);} render();
+if(location.hash.startsWith('#invite=')){setTimeout(visitorPreview,100);} render(); updateReminderUI(); initializeCloud(); setInterval(scanReminders,30000); scanReminders();
