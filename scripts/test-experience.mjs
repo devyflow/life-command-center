@@ -95,6 +95,29 @@ assert.equal(read('state.tasks.length'),3,'Repeated approval cannot duplicate ta
 assert.doesNotMatch(run('insightsView()'),/42%|You work best below five/);
 console.log('Experience: partial progress, rest days, repeat rewards, recurring tasks, safe resets, earned badges, hidden history and request deletion passed.');
 
+reset();
+run(`state.tasks=Array.from({length:24},(_,index)=>({id:index+1,title:'Dense task '+(index+1),progress:0,duration:30,area:'Career',category:'Projects',plan:'inbox',paperMarks:{}}));state.paper.layout={};state.paper.texts=[];normalizeStateShape();`);
+const densePaper=read(`(()=>{const plan=paperPlan(state.tasks),rects=[...plan.positions.values()].map(item=>({...item,w:300,h:76}));let overlaps=0;for(let i=0;i<rects.length;i++)for(let j=i+1;j<rects.length;j++){const a=rects[i],b=rects[j];if(a.x<b.x+b.w&&a.x+a.w>b.x&&a.y<b.y+b.h&&a.y+a.h>b.y)overlaps++;}return{height:plan.height,count:rects.length,overlaps,maxBottom:Math.max(...rects.map(item=>item.y+item.h))};})()`);
+assert.equal(densePaper.count,24);
+assert.equal(densePaper.overlaps,0,'Guided Paper placement must not overlap dense tasks');
+assert.ok(densePaper.height>=densePaper.maxBottom,'Paper must expand to contain every task');
+run(`state.paper.texts=[{id:90,x:7.5,y:11.5,text:'Legacy note',type:'note',mode:'placed',width:240,z:5}];normalizeStateShape();`);
+assert.equal(read(`(()=>{const plan=paperPlan(state.tasks),p=plan.textPositions.get(90),taskRects=[...plan.positions.values()].map(item=>({...item,w:300,h:76})),headRects=plan.headings.map((item,index)=>({key:'h'+index,x:item.x,y:item.y,w:330,h:item.kind==='area'?32:18}));return paperIsOverlap('text:90',{...p,w:240,h:88},[...taskRects.map((item,index)=>({key:'t'+index,...item})),...headRects]);})()`),false,'Guided Paper text must move away from tasks and section headings');
+run(`state.paper.layout[1]={x:100,y:140,unit:'px',mode:'float',z:9};`);
+assert.equal(read(`paperPlan(state.tasks).positions.get(1).mode`),'float','Individual Paper tasks can deliberately float');
+run(`state.boardNotes=[{id:1,text:'A visible principle',x:-5,y:0,w:20,h:30,showGlance:true}];state.library=[{id:2,title:'Diagram tool',context:'presentations',tags:['design'],status:'ready'}];normalizeStateShape();`);
+assert.deepEqual(read(`({x:state.boardNotes[0].x,y:state.boardNotes[0].y,w:state.boardNotes[0].w,h:state.boardNotes[0].h})`),{x:12,y:35,w:170,h:145},'Board notes receive safe sizes and positions');
+assert.match(run('boardView()'),/data-board-note-float/);
+run(`ui.libraryFilter='active';ui.libraryQuery='presentations'`);
+assert.equal(read(`state.library.filter(libraryMatches).length`),1,'Library search finds an item by its use context');
+run(`renderSearchResults('diagram')`);
+assert.match(elements.get('#searchResults').textContent,/data-search-library="2"/,'Global search includes useful-library items');
+const manifest=JSON.parse(await readFile(new URL('../client/manifest.webmanifest',import.meta.url),'utf8'));
+assert.equal(manifest.share_target.action,'/?share-target=1','Installed app can receive shared links');
+const serviceWorker=await readFile(new URL('../client/sw.js',import.meta.url),'utf8');
+assert.match(serviceWorker,/periodicsync/,'Supporting installed browsers can check reminders in the background');
+console.log('Workspace: dense Paper layout, deliberate floating, bulletin normalization and contextual library retrieval passed.');
+
 // The lifecycle test replaces only WebGL construction. Real mode/visibility handlers run unchanged.
 const media = new Map(), sceneNodes = new Map(), sceneEvents = new Map(), classes = new Set();
 const sceneDocument = {

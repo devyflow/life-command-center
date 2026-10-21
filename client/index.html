@@ -14,7 +14,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&family=Newsreader:ital,opsz,wght@1,6..72,500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=experience-v2">
+  <link rel="stylesheet" href="styles.css?v=workspace-v3">
 </head>
 <body>
   <div class="grain" aria-hidden="true"></div>
@@ -26,6 +26,8 @@
       <button class="nav-item" data-view="planner"><span>▦</span><b>Hour planner</b><i id="plannerCount">5</i></button>
       <button class="nav-item" data-view="inbox"><span>↓</span><b>Inbox</b><i id="inboxCount">3</i></button>
       <button class="nav-item" data-view="paper"><span>✎</span><b>Paper page</b><i id="paperCount">0</i></button>
+      <button class="nav-item" data-view="board"><span>▤</span><b>Bulletin board</b><i id="boardCount">0</i></button>
+      <button class="nav-item" data-view="library"><span>⌘</span><b>Useful library</b><i id="libraryCount">0</i></button>
       <button class="nav-item" data-view="all"><span>☷</span><b>All tasks</b><i id="allCount">0</i></button>
       <button class="nav-item" data-view="requests"><span>↙</span><b>Time requests</b><i id="requestCount">2</i></button>
     </nav>
@@ -59,7 +61,7 @@
   </main>
 
   <nav class="mobile-nav" aria-label="Mobile navigation">
-    <button class="active" data-view="today"><span>⌁</span>Today</button><button data-view="planner"><span>▦</span>Plan</button><button class="mobile-add" id="mobileAdd" aria-label="Add task">+</button><button data-view="paper"><span>✎</span>Paper</button><button id="mobileSearch"><span>⌕</span>Search</button>
+    <button class="active" data-view="today"><span>⌁</span>Today</button><button data-view="planner"><span>▦</span>Plan</button><button class="mobile-add" id="mobileAdd" aria-label="Add task">+</button><button data-view="paper"><span>✎</span>Paper</button><button data-view="board"><span>▤</span>Board</button><button data-view="library"><span>⌘</span>Library</button>
   </nav>
 
   <div class="modal-layer" id="searchModal" aria-hidden="true">
@@ -182,14 +184,48 @@
     </div>
   </div>
 
+  <div class="modal-layer" id="boardNoteModal" aria-hidden="true">
+    <div class="modal small-modal" role="dialog" aria-modal="true" aria-labelledby="boardNoteTitle">
+      <header class="modal-head"><div><p class="eyebrow">PIN TO YOUR WORKSTATION</p><h2 id="boardNoteTitle">Keep it in sight.</h2></div><button data-close="boardNoteModal">×</button></header>
+      <form id="boardNoteForm" class="stack-form">
+        <label>Kind<select id="boardNoteType"><option value="thought">Thought</option><option value="quote">Quote</option><option value="decision">Life decision</option><option value="reminder">Reminder</option><option value="question">Question</option></select></label>
+        <label>What should stay visible?<textarea id="boardNoteText" rows="5" maxlength="500" required placeholder="Write the thought, quote, decision or reminder…"></textarea></label>
+        <div class="two-col"><label>Colour<select id="boardNoteColor"><option value="yellow">Warm yellow</option><option value="blue">Soft blue</option><option value="pink">Coral pink</option><option value="green">Fresh green</option><option value="paper">White paper</option></select></label><label>Source or author<input id="boardNoteSource" maxlength="120" placeholder="Optional"></label></div>
+        <label class="choice-row compact-choices"><span><input id="boardNoteGlance" type="checkbox" checked> Show around the app</span><span><input id="boardNotePopup" type="checkbox"> Show an in-app popup</span></label>
+        <div class="two-col"><label>Remind on<input id="boardNoteDate" type="date"></label><label>At<input id="boardNoteTime" type="time" value="09:00"></label></div>
+        <footer class="modal-actions"><button class="danger-button" type="button" id="boardNoteDelete" hidden>Delete note</button><button class="primary" type="submit">Pin to board →</button></footer>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal-layer" id="boardModal" aria-hidden="true">
+    <div class="modal small-modal" role="dialog" aria-modal="true" aria-labelledby="boardTitle">
+      <header class="modal-head"><div><p class="eyebrow">NEW VISUAL SPACE</p><h2 id="boardTitle">Create a board.</h2></div><button data-close="boardModal">×</button></header>
+      <form id="boardForm" class="stack-form"><label>Board name<input id="boardName" maxlength="50" required placeholder="Ideas worth returning to"></label><label>Surface<select id="boardTheme"><option value="cork">Warm cork</option><option value="linen">Calm linen</option><option value="slate">Dark slate</option></select></label><button class="primary" type="submit">Create board →</button></form>
+    </div>
+  </div>
+
+  <div class="modal-layer" id="libraryModal" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="libraryModalTitle">
+      <header class="modal-head"><div><p class="eyebrow">SAVE IT SO YOU USE IT</p><h2 id="libraryModalTitle">Capture something useful.</h2></div><button data-close="libraryModal">×</button></header>
+      <form id="libraryForm">
+        <label class="title-field"><span>Name</span><textarea id="libraryTitle" rows="2" maxlength="180" required placeholder="A tool, website, book, post or useful idea"></textarea></label>
+        <div class="form-grid"><label>Type<select id="libraryType"><option value="tool">Tool</option><option value="website">Website</option><option value="book">Book</option><option value="post">Post</option><option value="video">Video</option><option value="trick">Trick</option><option value="idea">Idea</option><option value="reference">Reference</option></select></label><label>Link<input id="libraryUrl" type="url" placeholder="https://…"></label><label>Why did you save it?<input id="libraryWhy" maxlength="180" placeholder="Useful when preparing interviews"></label><label>Use it for<input id="libraryContext" maxlength="120" placeholder="DSA, résumé, design…"></label><label>Next action<select id="libraryAction"><option value="try">Try it</option><option value="read">Read it</option><option value="watch">Watch it</option><option value="compare">Compare it</option><option value="reference">Keep as reference</option></select></label><label>Time needed<select id="libraryMinutes"><option value="5">5 minutes</option><option value="15">15 minutes</option><option value="30" selected>30 minutes</option><option value="60">1 hour</option><option value="120">2 hours</option></select></label><label>Tags<input id="libraryTags" maxlength="160" placeholder="career, design, research"></label><label>Status<select id="libraryStatus"><option value="inbox">Needs review</option><option value="ready">Ready to use</option><option value="using">Using now</option><option value="done">Tried / read</option><option value="archived">Archived</option></select></label></div>
+        <label class="title-field"><span>Your note</span><textarea id="libraryNote" rows="3" maxlength="800" placeholder="What looked useful? What do you want to remember?"></textarea></label>
+        <footer class="modal-actions"><button class="danger-button" type="button" id="libraryDelete" hidden>Delete item</button><button class="primary" type="submit">Save to library →</button></footer>
+      </form>
+    </div>
+  </div>
+
   <div class="timer-dock" id="timerDock"><button class="timer-ring" id="timerToggle">▶</button><div><small>FOCUSING ON</small><strong id="timerTask">Task</strong></div><time id="timerTime">25:00</time><button class="timer-stop" id="timerStop">Finish session</button><button class="bare" id="timerClose">×</button></div>
   <aside class="install-nudge" id="installNudge" aria-live="polite" aria-label="Install Life Command Center" aria-hidden="true">
     <button class="install-nudge-close" id="installNudgeDismiss" type="button" aria-label="Not now">×</button>
     <span class="install-nudge-icon">L</span><div><small>KEEP IT WITH YOU</small><b id="installNudgeTitle">Install Life Command Center</b><p id="installNudgeText">Open it like an app from your desktop or home screen.</p><button id="installNudgeAction" type="button">Install app →</button></div>
   </aside>
+  <aside class="glance-popup" id="glancePopup" aria-live="polite" aria-hidden="true"><button class="glance-popup-close" data-glance-popup-close aria-label="Close">×</button><small id="glancePopupType">FROM YOUR BOARD</small><b id="glancePopupText"></b><button class="glance-popup-open" data-view="board">Open board →</button></aside>
   <div class="toast" id="toast"><span>✓</span><div><b id="toastTitle">Saved</b><small id="toastText">Your change is ready.</small></div></div>
   <div class="xp-burst" id="xpBurst"><span>✦</span><b id="xpBurstValue">+10 XP</b><small id="xpBurstText">Momentum earned</small></div>
-  <script src="app.js?v=experience-v2"></script>
-  <script type="module" src="scene.js?v=experience-v2"></script>
+  <script src="app.js?v=workspace-v3"></script>
+  <script type="module" src="scene.js?v=workspace-v3"></script>
 </body>
 </html>
