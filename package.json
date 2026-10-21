@@ -6,7 +6,9 @@
     "build": "node scripts/build.mjs",
     "validate": "node scripts/validate-artifact.mjs",
     "build:vercel": "node scripts/build-vercel.mjs",
-    "validate:vercel": "node scripts/validate-vercel.mjs"
+    "validate:vercel": "node scripts/validate-vercel.mjs",
+    "test:experience": "node scripts/test-experience.mjs",
+    "preview:qa": "node scripts/preview-experience.mjs"
   },
   "devDependencies": {
     "vercel": "^65.0.0"

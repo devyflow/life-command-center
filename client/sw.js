@@ -1,4 +1,4 @@
-const CACHE = "life-command-static-v5";
+const CACHE = "life-command-static-v6";
 const STATIC = ["/styles.css", "/app.js", "/scene.js", "/manifest.webmanifest", "/icon-192.png", "/icon-512.png"];
 
 self.addEventListener("install", event => {

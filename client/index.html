@@ -14,7 +14,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&family=Newsreader:ital,opsz,wght@1,6..72,500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=experience-v1">
+  <link rel="stylesheet" href="styles.css?v=experience-v2">
 </head>
 <body>
   <div class="grain" aria-hidden="true"></div>
@@ -48,9 +48,10 @@
     <div class="sidebar-foot"><div class="avatar" id="accountAvatar">A</div><div><b id="accountName">Your command center</b><small id="syncStatus">Connecting to cloud…</small></div><button class="bare" id="resetBtn" title="Reset demo">↻</button></div>
   </aside>
 
+  <button id="menuBackdrop" class="menu-backdrop" aria-label="Close menu" tabindex="-1"></button>
   <main>
     <header class="topbar">
-      <button class="menu-btn" id="menuBtn" aria-label="Open menu">☰</button>
+      <button class="menu-btn" id="menuBtn" aria-label="Open menu" aria-controls="sidebar" aria-expanded="false">☰</button>
       <div class="command-tools"><button class="capture-trigger" id="captureTrigger"><span>+</span><b>Capture anything…</b><kbd>C</kbd></button><button class="search-trigger" id="searchTrigger"><span>⌕</span><b>Find anything</b><kbd>/</kbd></button></div>
       <div class="top-actions"><button class="scene-btn active" id="sceneBtn" title="Toggle spatial effects">◉ <span>3D</span></button><button class="focus-btn" id="focusBtn" title="Enter focus mode">◎ <span>Focus</span></button><div class="today-date"><strong id="dateDay">17</strong><span id="dateMonth">OCT</span></div></div>
     </header>
@@ -119,10 +120,13 @@
           <div class="settings-actions"><button class="primary" type="button" id="exportBackup">Download backup</button><label class="secondary settings-file">Restore backup<input id="importBackup" type="file" accept="application/json,.json" hidden></label><button class="secondary" type="button" id="installApp" hidden>Install website app</button></div>
           <div class="settings-status"><span><b id="settingsSync">Cloud synced</b><small>Shared across signed-in devices</small></span><span><b id="settingsUpdated">No changes yet</b><small>Latest saved change</small></span></div>
           <label class="settings-select">Reminder lead time<select id="reminderLead"><option value="5">5 minutes</option><option value="10">10 minutes</option><option value="15">15 minutes</option><option value="30">30 minutes</option><option value="60">1 hour</option></select></label>
+          <label class="settings-select effects-choice">Visual effects on this device<select id="visualEffects" aria-describedby="visualEffectsHint"><option value="auto">Automatic · smooth on mobile and installed app</option><option value="off">Smooth · fastest scrolling</option><option value="on">3D · animated background</option></select></label>
+          <p id="visualEffectsHint" class="effects-hint">Choose the experience that feels best on this device.</p>
           <div class="motivation-panel">
             <div class="motivation-head"><span class="motivation-symbol">✦</span><div><b id="momentumBadge">Fresh start</b><small id="momentumMeaning">One clear action is enough to begin.</small></div></div>
             <div class="motivation-stats"><span><b id="momentumXp">0 XP</b><small>Momentum</small></span><span><b id="rhythmDays">0 days</b><small>Productive rhythm</small></span></div>
             <div class="momentum-progress"><i id="momentumProgress"></i></div><p id="momentumNext">Your next milestone is ready when you are. Rest days never remove progress.</p>
+            <p>Any new task progress counts once per day. Days do not need to be consecutive. Earned badges and focus-session history stay with you after a reset.</p>
             <div class="settings-actions"><button class="secondary" type="button" id="resetMomentum">Reset momentum</button><button class="secondary" type="button" id="resetRhythm">Reset productive days</button></div>
           </div>
           <div class="history-clear-panel"><div><b>Completed task history</b><small id="completedHistoryCount">No completed tasks to clear.</small><p>Completed tasks stay visible until you clear them manually. Clearing removes them from Tasks, Search, Paper, Planner and cloud storage. Your XP and streak remain.</p></div><button class="danger-button" type="button" id="clearCompletedHistory">Clear history</button></div>
@@ -185,7 +189,7 @@
   </aside>
   <div class="toast" id="toast"><span>✓</span><div><b id="toastTitle">Saved</b><small id="toastText">Your change is ready.</small></div></div>
   <div class="xp-burst" id="xpBurst"><span>✦</span><b id="xpBurstValue">+10 XP</b><small id="xpBurstText">Momentum earned</small></div>
-  <script src="app.js?v=experience-v1"></script>
-  <script type="module" src="scene.js?v=experience-v1"></script>
+  <script src="app.js?v=experience-v2"></script>
+  <script type="module" src="scene.js?v=experience-v2"></script>
 </body>
 </html>

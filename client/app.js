@@ -70,6 +70,7 @@ function normalizeStateShape() {
   state.profile.sessions = Math.max(0, Number(state.profile.sessions) || 0);
   state.profile.accuratePlans = Math.max(0, Number(state.profile.accuratePlans) || 0);
   state.requests.forEach(request => { request.status ||= 'pending'; });
+  state.profile.boundaries = Math.max(Number(state.profile.boundaries) || 0, state.requests.filter(request => request.status === 'declined').length);
   state.taxonomy = Array.isArray(state.taxonomy) && state.taxonomy.length ? state.taxonomy : clone(DEFAULT_TAXONOMY);
   state.taxonomy = state.taxonomy.map((area,index)=>({ name:String(area.name||`Area ${index+1}`).trim(), color:/^#[0-9a-f]{6}$/i.test(area.color||'')?area.color:DEFAULT_TAXONOMY[index%DEFAULT_TAXONOMY.length].color, categories:[...new Set((area.categories||[]).map(String).map(x=>x.trim()).filter(Boolean))] }));
   state.tasks.forEach(task=>{
@@ -77,7 +78,7 @@ function normalizeStateShape() {
     if(!area){area={name:task.area||'Unsorted',color:'#9cbe52',categories:[]};state.taxonomy.push(area);}
     if(task.category&&!area.categories.includes(task.category))area.categories.push(task.category);
   });
-  state.tasks.forEach(task => { task.paperMarks ||= { circle: task.paperEmphasis === 'circle', tick: false, box: task.paperEmphasis === 'box', star: task.paperEmphasis === 'star' }; task.repeat ||= 'none'; });
+  state.tasks.forEach(task => { task.paperMarks ||= { circle: task.paperEmphasis === 'circle', tick: false, box: task.paperEmphasis === 'box', star: task.paperEmphasis === 'star' }; task.repeat ||= 'none'; task.rewardProgress = Math.max(Number(task.rewardProgress) || 0, Number(task.progress) || 0); });
 }
 normalizeStateShape();
 function setSyncStatus(text, mode = '') {
@@ -207,7 +208,7 @@ function clearCompletedHistory(){
   save();render();updateCompletedHistoryControl();toast('Completed history cleared',`${completed.length} completed task${completed.length===1?' was':'s were'} removed everywhere. Your XP and streak were kept.`);
 }
 function resetMomentum(){
-  state.profile.xp=0;state.profile.sessions=0;state.profile.accuratePlans=0;
+  state.profile.xp=0;
   state.meta={...(state.meta||{}),momentumResetAt:new Date().toISOString()};
   save();render();updateMotivationControl();toast('Momentum reset','Tasks, productive days and completed work remain safe. Your next milestone starts from zero.');
 }
@@ -297,6 +298,14 @@ function updateMotivationControl() {
   if ($('#momentumProgress')) $('#momentumProgress').style.width = `${status.progress}%`;
   if ($('#momentumNext')) $('#momentumNext').textContent = status.next ? `${status.next.xp-state.profile.xp} XP to “${status.next.name}.” Rest days never remove progress.` : 'Highest milestone reached. Rest days never remove progress.';
 }
+function earnedBadges() {
+  return [
+    { name:'First Focus', symbol:'◈', meaning:'Finish a focus session.', earned:state.profile.sessions >= 1 },
+    { name:'Five-Day Rhythm', symbol:'✦', meaning:'Make progress on five days. They need not be consecutive.', earned:state.profile.bestStreak >= 5 },
+    { name:'Honest Planner', symbol:'⌁', meaning:'Rework a task so its next step fits your real day.', earned:state.profile.accuratePlans >= 1 },
+    { name:'Boundary Keeper', symbol:'◇', meaning:'Decline a time request to protect your priorities.', earned:state.profile.boundaries >= 1 }
+  ];
+}
 function reward(points, text) {
   state.profile.xp += points; save();
   $('#xpBurstValue').textContent = `+${points} XP`; $('#xpBurstText').textContent = text;
@@ -306,8 +315,8 @@ function toast(title, text = 'Your change is ready.') {
   $('#toastTitle').textContent = title; $('#toastText').textContent = text;
   $('#toast').classList.add('show'); setTimeout(() => $('#toast').classList.remove('show'), 2200);
 }
-function openModal(id) { $(`#${id}`).classList.add('open'); $(`#${id}`).setAttribute('aria-hidden', 'false'); }
-function closeModal(id) { $(`#${id}`).classList.remove('open'); $(`#${id}`).setAttribute('aria-hidden', 'true'); }
+function openModal(id) { $('#sidebar').classList.remove('open');$('#menuBtn').setAttribute('aria-expanded','false'); $(`#${id}`).classList.add('open'); $(`#${id}`).setAttribute('aria-hidden', 'false'); document.dispatchEvent(new Event('life-modal-change')); }
+function closeModal(id) { $(`#${id}`).classList.remove('open'); $(`#${id}`).setAttribute('aria-hidden', 'true'); document.dispatchEvent(new Event('life-modal-change')); }
 function setProductive() {
   if (state.profile.lastProductive === iso()) return;
   state.profile.streak += 1;
@@ -471,6 +480,16 @@ function paperView() {
     </section>`;
 }
 
+function deleteRequest(id) {
+  const request=state.requests.find(item=>item.id===id);if(!request)return;
+  state.requests=state.requests.filter(item=>item.id!==id);
+  save();render();toast('Request deleted','Tasks created from an approval remain in your plan.');
+}
+function clearRequestHistory() {
+  const count=state.requests.filter(request=>request.status!=='pending').length;
+  state.requests=state.requests.filter(request=>request.status==='pending');
+  save();render();toast('Request history cleared',`${count} resolved request${count===1?' was':'s were'} removed. Pending requests and approved tasks were kept.`);
+}
 function requestCard(r) {
   const pending = r.status === 'pending';
   const actions = pending
@@ -500,10 +519,12 @@ function shareView() {
 function settingRow(key,title,copy) { return `<div class="setting-row"><div><b>${title}</b><small>${copy}</small></div><button class="switch ${state.share[key]?'on':''}" data-setting="${key}" aria-label="Toggle ${title}"><i></i></button></div>`; }
 
 function insightsView() {
+  const open = state.tasks.filter(task => task.progress < 100), remaining = Math.round(open.reduce((total,task)=>total+task.duration*(1-task.progress/100),0));
+  const unclear = open.filter(task => !task.next?.trim()).length, unscheduled = open.filter(task => !task.start).length;
   return `${pageHead('LEARN FROM YOUR REAL BEHAVIOR', `Your patterns.<br><em>Without judgment.</em>`)}<div class="insight-grid">
-    <article class="insight-card"><p class="eyebrow">FOCUS BY DAY</p><h3>You work best below five planned hours.</h3><p>Days with breathing room have produced more completed focus time than overloaded days.</p><div class="bar-chart">${[52,78,61,90,72,28,18].map((h,i)=>`<div><i style="height:${h}%"></i><span>${'MTWTFSS'[i]}</span></div>`).join('')}</div></article>
-    <article class="insight-card"><p class="eyebrow">RECOVERY PATTERNS</p><h3>What usually causes delay</h3><div class="pattern-list"><div><b>42%</b> No clear first action</div><div><b>31%</b> Duration was underestimated</div><div><b>18%</b> Meetings displaced the session</div><div><b>9%</b> Energy did not match the task</div></div></article>
-    <article class="insight-card large"><p class="eyebrow">BADGES THAT REWARD HEALTHY WORK</p><h3>Your mind gets credit for good decisions, not just more checkboxes.</h3><div class="reward-showcase"><div class="reward-badge"><span>◈</span><b>First Focus</b><small>Completed a timed session</small></div><div class="reward-badge"><span>✦</span><b>Five-Day Flow</b><small>Showed up for five days</small></div><div class="reward-badge"><span>⌁</span><b>Honest Planner</b><small>Rescheduled before overload</small></div><div class="reward-badge"><span>◇</span><b>Boundary Keeper</b><small>Protected priority work</small></div></div></article>
+    <article class="insight-card"><p class="eyebrow">YOUR RECORDED PROGRESS</p><h3>Every return counts.</h3><div class="pattern-list"><div><b>${state.profile.streak}</b> productive days in your current rhythm</div><div><b>${state.profile.sessions}</b> focus sessions finished</div><div><b>${state.profile.accuratePlans}</b> deliberate replans recorded</div></div><p>A new increase in task progress counts once per day, even before a task is finished. Rest days never remove XP or productive days.</p></article>
+    <article class="insight-card"><p class="eyebrow">YOUR CURRENT TASKS</p><h3>Make the next step easier.</h3><div class="pattern-list"><div><b>${open.length}</b> open tasks · ${duration(remaining)} remaining</div><div><b>${unclear}</b> tasks need a clear first action</div><div><b>${unscheduled}</b> tasks have no chosen time</div></div><p>These counts come from the tasks currently in your workspace.</p><button class="secondary" data-view="all">Review tasks →</button></article>
+    <article class="insight-card large"><p class="eyebrow">BADGES THAT REWARD HEALTHY WORK</p><h3>Credit for showing up, planning honestly and protecting your time.</h3><div class="reward-showcase">${earnedBadges().map(badge=>`<div class="reward-badge ${badge.earned?'earned':'upcoming'}"><span>${badge.symbol}</span><b>${badge.name}</b><small>${badge.meaning}</small><em>${badge.earned?'Earned':'To discover'}</em></div>`).join('')}</div><p>Earned badges stay with you after a rest day, a momentum reset or clearing request history. Each new 25% task milestone earns 10 XP, with 20 extra for first completion; repeating the same progress does not add more XP.</p></article>
   </div>`;
 }
 
@@ -521,7 +542,7 @@ function render() {
   if (ui.view === 'paper') requestAnimationFrame(initPaperBoard);
 }
 
-function setView(view) { ui.view = view; if (view !== 'inbox') { ui.space = null; ui.category = null; } render(); $('#sidebar').classList.remove('open'); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+function setView(view) { if(view==='requests' && ui.view!=='requests')ui.requestFilter='pending'; ui.view = view; if (view !== 'inbox') { ui.space = null; ui.category = null; } render(); $('#sidebar').classList.remove('open'); window.scrollTo({ top: 0, behavior: 'instant' }); }
 function nextRecurringDate(task) {
   const base = new Date(`${task.date || iso()}T12:00:00`);
   if (task.repeat === 'daily') base.setDate(base.getDate() + 1);
@@ -532,16 +553,19 @@ function nextRecurringDate(task) {
 function spawnRecurringTask(task) {
   if (!task.repeat || task.repeat === 'none' || task.recurrenceSpawned) return;
   task.recurrenceSpawned = true;
-  const next = { ...clone(task), id:uid(), date:nextRecurringDate(task), progress:0, recurrenceSpawned:false, createdAt:new Date().toISOString(), updatedAt:new Date().toISOString() };
+  const next = { ...clone(task), id:uid(), date:nextRecurringDate(task), progress:0, rewardProgress:0, replanRewarded:false, recurrenceSpawned:false, createdAt:new Date().toISOString(), updatedAt:new Date().toISOString() };
   state.tasks.push(next);
   toast('Next recurring task created', `${next.title} is scheduled for ${dateLabel(next.date)}.`);
 }
 function updateProgress(id, value) {
   const task = state.tasks.find(t => t.id === id); if (!task) return;
-  const old = task.progress; task.progress = Number(value);
-  const crossed = Math.floor(task.progress / 25) - Math.floor(old / 25);
+  const old = Number(task.progress)||0, previousBest = Math.max(Number(task.rewardProgress)||0,old);
+  task.progress = Math.max(0,Math.min(100,Number(value)||0));
+  const crossed = Math.floor(task.progress / 25) - Math.floor(previousBest / 25);
+  task.rewardProgress = Math.max(previousBest,task.progress);
+  if (task.progress > previousBest) setProductive();
   if (crossed > 0) reward(crossed * 10 + (task.progress === 100 ? 20 : 0), task.progress === 100 ? 'Completion with context preserved' : 'Honest progress counts');
-  if (task.progress === 100 && old < 100) { setProductive(); spawnRecurringTask(task); if(!task.repeat||task.repeat==='none')toast('Task complete', 'Your remaining workload has been recalculated.'); }
+  if (task.progress === 100 && old < 100) { spawnRecurringTask(task); if(!task.repeat||task.repeat==='none')toast('Task complete', 'Your remaining workload has been recalculated.'); }
   save(); render();
 }
 function startTimer(task) {
@@ -557,7 +581,7 @@ function tick() {
 }
 function finishTimer() {
   if (!ui.timer) return; const task = state.tasks.find(t => t.id === ui.timer.taskId);
-  if (task) { state.profile.sessions++; updateProgress(task.id, Math.min(100, task.progress + 25)); reward(20, 'Focused session completed'); }
+  if (task) { state.profile.sessions++; setProductive(); updateProgress(task.id, Math.min(100, task.progress + 25)); reward(20, 'Focused session completed'); render(); }
   closeTimer();
 }
 function closeTimer() { if (timerHandle) clearInterval(timerHandle); timerHandle = null; ui.timer = null; $('#timerDock').classList.remove('show'); }
@@ -819,7 +843,8 @@ document.addEventListener('click', event => {
     if (rescueAction.dataset.rescue === 'unclear') { task.next = 'Write the next physical action before doing anything else'; task.postponed = 0; }
     if (rescueAction.dataset.rescue === 'later') { task.date = iso(addDays(2)); task.plan = 'today'; task.postponed = 0; }
     if (rescueAction.dataset.rescue === 'drop') state.tasks = state.tasks.filter(t => t.id !== task.id);
-    save(); closeModal('rescueModal'); reward(10, 'A conscious decision protects attention'); toast('Task recovered', 'Your plan now reflects reality.'); render(); return;
+    if(!task.replanRewarded){task.replanRewarded=true;state.profile.accuratePlans++;reward(10, 'A conscious decision protects attention');}
+    save(); closeModal('rescueModal'); toast('Task recovered', 'Your plan now reflects reality.'); render(); return;
   }
   const schedule = event.target.closest('[data-schedule]'); if (schedule) { const t = state.tasks.find(x=>x.id===Number(schedule.dataset.schedule)); t.start = schedule.dataset.time; t.plan = 'fixed'; save(); reward(10,'A flexible commitment has a home'); toast('Time chosen', `${t.title} is now at ${clock(mins(t.start))}.`); render(); return; }
   const shift = event.target.closest('[data-date-shift]'); if (shift) { ui.planningDate = iso(addDays(Number(shift.dataset.dateShift), new Date(`${ui.planningDate}T12:00:00`))); render(); return; }
@@ -828,14 +853,15 @@ document.addEventListener('click', event => {
   const space = event.target.closest('[data-space]'); if (space) { ui.view='inbox'; ui.space=space.dataset.space; ui.category=null; render(); return; }
   const category = event.target.closest('[data-category]'); if (category) { ui.view='inbox'; ui.category=category.dataset.category; ui.space=category.dataset.categoryArea||null; render(); return; }
   const requestFilter = event.target.closest('[data-request-filter]'); if(requestFilter){ui.requestFilter=requestFilter.dataset.requestFilter;render();return;}
-  if(event.target.closest('[data-clear-request-history]')){const count=state.requests.filter(r=>r.status!=='pending').length;state.requests=state.requests.filter(r=>r.status==='pending');save();render();toast('Request history cleared',`${count} resolved request${count===1?' was':'s were'} removed. Tasks created from approvals remain in your plan.`);return;}
+  if(event.target.closest('[data-clear-request-history]')){clearRequestHistory();return;}
   const reqAction = event.target.closest('[data-request-action]'); if (reqAction) {
     const card = reqAction.closest('[data-request]'), r = state.requests.find(x=>x.id===Number(card.dataset.request));
     if(!r)return;
+    if(reqAction.dataset.requestAction==='delete'){deleteRequest(r.id);return;}
+    if(r.status!=='pending')return;
     if (reqAction.dataset.requestAction === 'accept') { r.status='approved';r.resolvedAt=new Date().toISOString(); state.tasks.push({ id:uid(), title:r.purpose, area:'Career', category:'Meetings', duration:r.duration, energy:'medium', date:r.date, start:r.start, plan:'fixed', progress:0, next:r.outcome, timer:false, publish:true, publicTitle:'Scheduled conversation', calendar:true, postponed:0 }); state.tasks.push({ id:uid(), title:`Prepare for: ${r.purpose}`, area:'Career', category:'Meetings', duration:20, energy:'low', date:r.date, start:null, plan:'today', progress:0, next:'Review the request context and expected result', timer:true, publish:false, calendar:false, postponed:0 }); reward(15,'A clear commitment was created'); toast('Request approved','Event and preparation task were added. The request moved to History.'); }
     if (reqAction.dataset.requestAction === 'shorten') { r.duration=30; r.impact='Reduced to 30 minutes; your workout keeps a 30-minute buffer.'; r.safe=true; toast('Shorter option prepared','The request now fits your day better.'); }
-    if (reqAction.dataset.requestAction === 'reject') { r.status='declined';r.resolvedAt=new Date().toISOString(); reward(10,'Protecting priorities is productive'); toast('Request declined','Your planned work remains protected. The request moved to History.'); }
-    if (reqAction.dataset.requestAction === 'delete') { state.requests=state.requests.filter(item=>item.id!==r.id);toast(r.status==='pending'?'Pending request deleted':'Request removed from history',r.status==='pending'?'It will no longer appear in your approval inbox.':'Any tasks created from it remain in your plan.'); }
+    if (reqAction.dataset.requestAction === 'reject') { r.status='declined';r.resolvedAt=new Date().toISOString();state.profile.boundaries++; reward(10,'Protecting priorities is productive'); toast('Request declined','Your planned work remains protected. The request moved to History.'); }
     save(); render(); return;
   }
   const setting = event.target.closest('[data-setting]'); if (setting) { state.share[setting.dataset.setting]=!state.share[setting.dataset.setting]; save(); render(); return; }
@@ -868,8 +894,8 @@ document.addEventListener('dragend',()=>{$$('[data-planner-time].drag-over').for
 
 $('#captureTrigger').addEventListener('click',()=>openTaskEditor()); $('#mobileAdd').addEventListener('click',()=>openTaskEditor());
 $('#searchTrigger').addEventListener('click',openSearch); $('#mobileSearch').addEventListener('click',openSearch);
-$$('[data-view]').forEach(control => control.addEventListener('click', event => { event.preventDefault(); setView(control.dataset.view); }));
-$('#menuBtn').addEventListener('click',()=>$('#sidebar').classList.toggle('open'));
+$('#menuBtn').addEventListener('click',()=>{const open=$('#sidebar').classList.toggle('open');$('#menuBtn').setAttribute('aria-expanded',String(open));});
+$('#menuBackdrop').addEventListener('click',()=>{$('#sidebar').classList.remove('open');$('#menuBtn').setAttribute('aria-expanded','false');});
 $('#focusBtn').addEventListener('click',()=>{document.body.classList.toggle('focus-mode');toast(document.body.classList.contains('focus-mode')?'Focus mode on':'Focus mode off');});
 $('#settingsBtn').addEventListener('click',openSettings);
 $('#reminderBtn').addEventListener('click',toggleReminders);
