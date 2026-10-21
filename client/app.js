@@ -506,7 +506,7 @@ function openTaskEditor(task = null) {
 }
 
 const OCR_SCRIPT = 'https://cdn.jsdelivr.net/npm/tesseract.js@6.0.1/dist/tesseract.min.js';
-let scanRuntime = { file:null, previewUrl:null, candidates:[], running:false, worker:null, libraryPromise:null, confidence:null };
+let scanRuntime = { file:null, previewUrl:null, candidates:[], running:false, worker:null, libraryPromise:null, confidence:null, pass:null };
 
 function setScanStatus(title, detail = '', mode = 'idle') {
   const status=$('#scanStatus'); if(!status)return; status.dataset.state=mode;
@@ -534,9 +534,9 @@ function renderScanCandidates() {
 function parseScanText(raw) {
   const seen=new Set();
   return String(raw||'').replace(/\r/g,'').split('\n').map(line=>line.replace(/\s+/g,' ').trim()).filter(Boolean).map(line=>{
-    const completed=/^(?:\[\s*[xX✓✔]\s*\]|☑|✓|✔)\s*/.test(line);
+    const completed=/^(?:\[\s*[xXvV✓✔]\s*\]?|☑|✓|✔)\s*/.test(line);
     const important=/^(?:!{1,2}|★|\*)\s*/.test(line);
-    let text=line.replace(/^(?:\[\s*[xX✓✔ ]?\s*\]|☐|☑|✓|✔|[-•·▪◦–—]|!{1,2}|★|\*)\s*/,'').replace(/^\d{1,2}[.)]\s+/,'').trim();
+    let text=line.replace(/^(?:\[\s*[xXvV✓✔1Il| ]?\s*\]?|☐|☑|✓|✔|[-•·▪◦–—]|!{1,2}|★|\*)\s*/,'').replace(/^\d{1,2}[.)]\s+/,'').trim();
     if(text.length<2)return null;
     const key=text.toLowerCase();if(seen.has(key))return null;seen.add(key);
     const heading=/:$/.test(text)||(text.length<=45&&/[A-Z]/.test(text)&&text===text.toUpperCase());
@@ -554,34 +554,75 @@ function loadOcrLibrary() {
   });
   return scanRuntime.libraryPromise;
 }
+async function decodeScanImage(file) {
+  if('createImageBitmap' in window){
+    try{return await createImageBitmap(file,{imageOrientation:'from-image'});}catch{return await createImageBitmap(file);}
+  }
+  const url=URL.createObjectURL(file),image=new Image();
+  try{await new Promise((resolve,reject)=>{image.onload=resolve;image.onerror=()=>reject(new Error('This image could not be opened. Try JPG, PNG or WebP.'));image.src=url;});return image;}finally{URL.revokeObjectURL(url);}
+}
+function scanCanvas(width,height){const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;return canvas;}
+async function prepareScanVariants(file,mode='auto') {
+  setScanStatus('Improving the page…','Straightening orientation, enlarging text and correcting uneven light.','working');
+  const source=await decodeScanImage(file),sourceWidth=source.naturalWidth||source.width,sourceHeight=source.naturalHeight||source.height;
+  if(!sourceWidth||!sourceHeight)throw new Error('This image has no readable dimensions.');
+  const longest=Math.max(sourceWidth,sourceHeight),scale=Math.max(.35,Math.min(3,longest<1800?1800/longest:2600/longest));
+  const width=Math.max(1,Math.round(sourceWidth*scale)),height=Math.max(1,Math.round(sourceHeight*scale));
+  const gray=scanCanvas(width,height),context=gray.getContext('2d',{willReadFrequently:true});context.fillStyle='#fff';context.fillRect(0,0,width,height);context.drawImage(source,0,0,width,height);if(source.close)source.close();
+  const pixels=context.getImageData(0,0,width,height),data=pixels.data,histogram=new Uint32Array(256);let total=0;
+  for(let i=0;i<data.length;i+=4){if(data[i+3]<24)continue;const value=Math.round(.2126*data[i]+.7152*data[i+1]+.0722*data[i+2]);histogram[value]++;total++;}
+  const percentile=ratio=>{let seen=0,target=total*ratio;for(let i=0;i<256;i++){seen+=histogram[i];if(seen>=target)return i;}return ratio<.5?0:255;};
+  const low=percentile(.01),high=Math.max(low+35,percentile(.995)),contrast=mode==='handwriting'?1.2:1.08;
+  const grayValues=new Uint8ClampedArray(width*height);
+  for(let i=0,p=0;i<data.length;i+=4,p++){
+    const value=.2126*data[i]+.7152*data[i+1]+.0722*data[i+2];let adjusted=(value-low)*255/(high-low);adjusted=(adjusted-148)*contrast+148;adjusted=Math.max(0,Math.min(255,adjusted));grayValues[p]=adjusted;data[i]=data[i+1]=data[i+2]=adjusted;data[i+3]=255;
+  }
+  context.putImageData(pixels,0,0);
+  if(mode==='printed')return [{canvas:gray,label:'clean text',psm:6}];
+  const binary=scanCanvas(width,height),binaryContext=binary.getContext('2d'),binaryPixels=binaryContext.createImageData(width,height),output=binaryPixels.data;
+  const integral=new Float64Array((width+1)*(height+1));
+  for(let y=1;y<=height;y++){let row=0;for(let x=1;x<=width;x++){row+=grayValues[(y-1)*width+x-1];integral[y*(width+1)+x]=integral[(y-1)*(width+1)+x]+row;}}
+  const radius=Math.max(12,Math.round(Math.min(width,height)/85)),bias=mode==='handwriting'?14:11;
+  for(let y=0,p=0;y<height;y++){const y0=Math.max(0,y-radius),y1=Math.min(height-1,y+radius);for(let x=0;x<width;x++,p++){const x0=Math.max(0,x-radius),x1=Math.min(width-1,x+radius),count=(x1-x0+1)*(y1-y0+1),sum=integral[(y1+1)*(width+1)+(x1+1)]-integral[y0*(width+1)+(x1+1)]-integral[(y1+1)*(width+1)+x0]+integral[y0*(width+1)+x0],mean=sum/count,value=grayValues[p],ink=value<Math.min(185,mean-bias),index=p*4,tone=ink?0:255;output[index]=output[index+1]=output[index+2]=tone;output[index+3]=255;}}
+  binaryContext.putImageData(binaryPixels,0,0);
+  return mode==='handwriting'?[{canvas:binary,label:'handwriting',psm:11},{canvas:gray,label:'soft handwriting',psm:11}]:[{canvas:gray,label:'balanced',psm:6},{canvas:binary,label:'high contrast',psm:11}];
+}
+function ocrResultScore(result) {
+  const text=String(result?.data?.text||'').trim(),confidence=Number(result?.data?.confidence||0);if(!text)return -1000;
+  const useful=(text.match(/[A-Za-z0-9\u0900-\u097f]/g)||[]).length,weird=(text.match(/[^\sA-Za-z0-9\u0900-\u097f.,:;!?()'"\-\/&+%#@]/g)||[]).length,lines=text.split(/\n/).filter(line=>line.trim().length>1).length;
+  return confidence+Math.min(12,useful/28)+Math.min(8,lines)-Math.min(24,weird*1.8)-(/(.)\1{4,}/.test(text)?12:0);
+}
 async function recognizeScan() {
   if(!scanRuntime.file||scanRuntime.running)return;
   scanRuntime.running=true;scanRuntime.candidates=[];scanRuntime.confidence=null;renderScanCandidates();
   $('#scanRetry').hidden=true;$('#scanProgress').hidden=false;$('#scanProgressBar').style.width='2%';
   setScanStatus('Preparing recognition…','The first scan can take a little longer.','working');updateScanSelection();
   try {
-    const Tesseract=await loadOcrLibrary();
-    scanRuntime.worker=await Tesseract.createWorker('eng',1,{logger:message=>{
+    const Tesseract=await loadOcrLibrary(),mode=$('#scanMode')?.value||'auto',language=$('#scanLanguage')?.value||'eng',variants=await prepareScanVariants(scanRuntime.file,mode),results=[];
+    scanRuntime.worker=await Tesseract.createWorker(language,1,{logger:message=>{
       const progress=Math.max(0,Math.min(1,Number(message.progress||0)));
-      $('#scanProgressBar').style.width=`${Math.max(3,Math.round(progress*100))}%`;
+      const pass=Math.max(0,scanRuntime.pass||0),total=Math.max(1,variants.length),overall=(pass+progress)/total;
+      $('#scanProgressBar').style.width=`${Math.max(3,Math.round(overall*100))}%`;
       const label=message.status?message.status.replace(/_/g,' '):'Reading the page';
-      setScanStatus(label.charAt(0).toUpperCase()+label.slice(1),progress?`${Math.round(progress*100)}% complete`:'This stays on your device.','working');
+      setScanStatus(label.charAt(0).toUpperCase()+label.slice(1),`${Math.round(overall*100)}% complete · pass ${Math.min(total,pass+1)} of ${total}`,'working');
     }});
-    const result=await scanRuntime.worker.recognize(scanRuntime.file);
-    scanRuntime.confidence=Math.round(result.data.confidence||0);scanRuntime.candidates=parseScanText(result.data.text);
-    $('#scanConfidence').textContent=scanRuntime.candidates.length?`${scanRuntime.confidence}% OCR confidence`:'';
-    if(scanRuntime.candidates.length)setScanStatus('Page read successfully.',`${scanRuntime.candidates.length} editable items are ready for review.`,'done');
+    for(let index=0;index<variants.length;index++){
+      scanRuntime.pass=index;const variant=variants[index];await scanRuntime.worker.setParameters({tessedit_pageseg_mode:String(variant.psm),preserve_interword_spaces:'1',user_defined_dpi:'300'});const result=await scanRuntime.worker.recognize(variant.canvas);results.push({...result,label:variant.label,score:ocrResultScore(result)});await new Promise(resolve=>setTimeout(resolve,0));
+    }
+    const result=results.sort((a,b)=>b.score-a.score)[0];scanRuntime.confidence=Math.round(result?.data?.confidence||0);scanRuntime.candidates=parseScanText(result?.data?.text||'');
+    $('#scanConfidence').textContent=scanRuntime.candidates.length?`${scanRuntime.confidence}% · ${result.label}`:'';
+    if(scanRuntime.candidates.length)setScanStatus('Enhanced page read complete.',`${scanRuntime.candidates.length} editable items are ready. Check uncertain words before importing.`,'done');
     else setScanStatus('No clear lines were found.','Try a straighter photo with stronger light, or add a line manually.','error');
   } catch(error) {
     setScanStatus('The page could not be read.',error?.message||'Try another image or a clearer photo.','error');
   } finally {
     if(scanRuntime.worker){try{await scanRuntime.worker.terminate();}catch{}scanRuntime.worker=null;}
-    scanRuntime.running=false;$('#scanProgress').hidden=true;$('#scanRetry').hidden=false;renderScanCandidates();
+    scanRuntime.running=false;scanRuntime.pass=null;$('#scanProgress').hidden=true;$('#scanRetry').hidden=false;renderScanCandidates();
   }
 }
 function resetScan() {
   if(scanRuntime.previewUrl)URL.revokeObjectURL(scanRuntime.previewUrl);
-  scanRuntime.file=null;scanRuntime.previewUrl=null;scanRuntime.candidates=[];scanRuntime.running=false;scanRuntime.confidence=null;
+  scanRuntime.file=null;scanRuntime.previewUrl=null;scanRuntime.candidates=[];scanRuntime.running=false;scanRuntime.confidence=null;scanRuntime.pass=null;
   const image=$('#scanPreview');image.hidden=true;image.removeAttribute('src');$('#scanPlaceholder').hidden=false;$('#scanProgress').hidden=true;$('#scanRetry').hidden=true;$('#scanConfidence').textContent='';
   setScanStatus('Ready when you are.','Nothing leaves this browser until you add the detected items.');renderScanCandidates();
 }
@@ -736,6 +777,8 @@ $('#lockWorkspace').addEventListener('click',async()=>{try{await fetch('/api/log
 $('#scanCamera').addEventListener('change',event=>{acceptScanFile(event.target.files?.[0]);event.target.value='';});
 $('#scanUpload').addEventListener('change',event=>{acceptScanFile(event.target.files?.[0]);event.target.value='';});
 $('#scanRetry').addEventListener('click',recognizeScan);$('#scanImport').addEventListener('click',importScanToPaper);
+$('#scanMode').addEventListener('change',event=>{$('#scanQualityTip').textContent=event.target.value==='handwriting'?'Handwriting mode uses strong local contrast and sparse-text reading. Keep the page flat and fill most of the photo.':event.target.value==='printed'?'Printed mode is faster for clean documents and screenshots.':'Auto enhance corrects lighting and tries two reading styles. Choose Handwriting for notes written with a pen.';if(scanRuntime.file)recognizeScan();});
+$('#scanLanguage').addEventListener('change',()=>{if(scanRuntime.file)recognizeScan();});
 $('#exportBackup').addEventListener('click',exportBackup);
 $('#importBackup').addEventListener('change',event=>{const file=event.target.files?.[0];if(file)importBackupFile(file);event.target.value='';});
 $('#installApp').addEventListener('click',installWebsite);

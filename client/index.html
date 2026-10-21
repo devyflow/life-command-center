@@ -140,6 +140,11 @@
             <label class="primary scan-file-button">Take photo<input id="scanCamera" type="file" accept="image/*" capture="environment" hidden></label>
             <label class="secondary scan-file-button">Upload image<input id="scanUpload" type="file" accept="image/png,image/jpeg,image/webp,image/heic,image/heif" hidden></label>
           </div>
+          <div class="scan-options">
+            <label>Page type<select id="scanMode"><option value="auto">Auto enhance</option><option value="handwriting">Handwriting</option><option value="printed">Clean printed text</option></select></label>
+            <label>Language<select id="scanLanguage"><option value="eng">English</option><option value="hin">Hindi</option><option value="eng+hin">English + Hindi</option></select></label>
+          </div>
+          <p class="scan-quality-tip" id="scanQualityTip">Auto enhance corrects lighting and tries two reading styles. Choose Handwriting for notes written with a pen.</p>
           <div class="scan-progress" id="scanProgress" hidden><i id="scanProgressBar"></i></div>
           <div class="scan-status" id="scanStatus" data-state="idle"><b>Ready when you are.</b><span>Nothing leaves this browser until you add the detected items.</span></div>
           <button class="ghost-btn scan-retry" id="scanRetry" type="button" hidden>Scan this image again</button>
@@ -168,7 +173,7 @@
   <div class="timer-dock" id="timerDock"><button class="timer-ring" id="timerToggle">▶</button><div><small>FOCUSING ON</small><strong id="timerTask">Task</strong></div><time id="timerTime">25:00</time><button class="timer-stop" id="timerStop">Finish session</button><button class="bare" id="timerClose">×</button></div>
   <div class="toast" id="toast"><span>✓</span><div><b id="toastTitle">Saved</b><small id="toastText">Your change is ready.</small></div></div>
   <div class="xp-burst" id="xpBurst"><span>✦</span><b id="xpBurstValue">+10 XP</b><small id="xpBurstText">Momentum earned</small></div>
-  <script src="app.js?v=daily-driver-v1"></script>
+  <script src="app.js?v=ocr-v2"></script>
   <script type="module" src="scene.js?v=cloud-foundation-v1"></script>
 </body>
 </html>
