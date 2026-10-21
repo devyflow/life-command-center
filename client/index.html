@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&family=Newsreader:ital,opsz,wght@1,6..72,500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=semantic-paper-v1">
+  <link rel="stylesheet" href="styles.css?v=paper-scan-v1">
 </head>
 <body>
   <div class="grain" aria-hidden="true"></div>
@@ -29,6 +29,7 @@
       <button class="nav-item" data-view="share"><span>◎</span><b>Share time</b></button>
       <button class="nav-item" data-view="insights"><span>↗</span><b>Insights</b></button>
       <button class="nav-item" id="reminderBtn"><span>◷</span><b>Browser reminders</b><i id="reminderState">Off</i></button>
+      <button class="nav-item" id="lockWorkspace"><span>⌾</span><b>Lock workspace</b></button>
     </nav>
     <div class="space-tree">
       <p class="eyebrow">MY LIFE</p>
@@ -102,6 +103,34 @@
 
   <div class="modal-layer" id="shareModal" aria-hidden="true"><div class="modal share-modal" role="dialog" aria-modal="true"><header class="modal-head"><div><p class="eyebrow">VISITOR PREVIEW</p><h2>This is what they will see.</h2></div><button data-close="shareModal">×</button></header><div id="visitorPreview"></div></div></div>
 
+  <div class="modal-layer" id="scanModal" aria-hidden="true">
+    <div class="modal scan-modal" role="dialog" aria-modal="true" aria-labelledby="scanTitle">
+      <header class="modal-head"><div><p class="eyebrow">SCAN INTO PAPER</p><h2 id="scanTitle">Turn a page into editable tasks.</h2></div><button data-close="scanModal">×</button></header>
+      <div class="scan-intro"><p>Photograph a handwritten or printed page, or upload a screenshot. Recognition happens in this browser; the source image is not saved to your account.</p><span>English text works best · the first scan downloads the recognition engine</span></div>
+      <div class="scan-layout">
+        <section class="scan-source-panel">
+          <div class="scan-preview-frame" id="scanPreviewFrame"><div id="scanPlaceholder"><b>▧</b><strong>No page selected</strong><small>Use a clear, straight image with good light.</small></div><img id="scanPreview" alt="Selected page preview" hidden></div>
+          <div class="scan-source-actions">
+            <label class="primary scan-file-button">Take photo<input id="scanCamera" type="file" accept="image/*" capture="environment" hidden></label>
+            <label class="secondary scan-file-button">Upload image<input id="scanUpload" type="file" accept="image/png,image/jpeg,image/webp,image/heic,image/heif" hidden></label>
+          </div>
+          <div class="scan-progress" id="scanProgress" hidden><i id="scanProgressBar"></i></div>
+          <div class="scan-status" id="scanStatus" data-state="idle"><b>Ready when you are.</b><span>Nothing leaves this browser until you add the detected items.</span></div>
+          <button class="ghost-btn scan-retry" id="scanRetry" type="button" hidden>Scan this image again</button>
+        </section>
+        <section class="scan-review-panel">
+          <div class="scan-review-head"><div><p class="eyebrow">DETECTED ITEMS</p><h3 id="scanReviewTitle">Your editable review will appear here.</h3></div><div><span id="scanConfidence"></span><button class="ghost-btn" type="button" data-scan-add-line>+ Add line</button></div></div>
+          <div class="scan-destination">
+            <label>Life area<select id="scanArea"><option>Career</option><option>Personal</option><option>Growth</option></select></label>
+            <label>Category<input id="scanCategory" value="Scanned page" maxlength="40"></label>
+          </div>
+          <div class="scan-candidates" id="scanCandidates"><div class="scan-empty"><b>1</b><span>Choose a photo or screenshot.</span><b>2</b><span>Correct the detected lines.</span><b>3</b><span>Add them to your Paper page.</span></div></div>
+        </section>
+      </div>
+      <footer class="modal-actions scan-actions"><span id="scanSelectionCount">No items selected yet.</span><div><button class="secondary" type="button" data-close="scanModal">Cancel</button><button class="primary" type="button" id="scanImport" disabled>Add selected items to Paper →</button></div></footer>
+    </div>
+  </div>
+
   <div class="modal-layer" id="rescueModal" aria-hidden="true">
     <div class="modal small-modal" role="dialog" aria-modal="true">
       <header class="modal-head"><div><p class="eyebrow">RECOVERY, NOT GUILT</p><h2>What is blocking this?</h2></div><button data-close="rescueModal">×</button></header>
@@ -113,7 +142,7 @@
   <div class="timer-dock" id="timerDock"><button class="timer-ring" id="timerToggle">▶</button><div><small>FOCUSING ON</small><strong id="timerTask">Task</strong></div><time id="timerTime">25:00</time><button class="timer-stop" id="timerStop">Finish session</button><button class="bare" id="timerClose">×</button></div>
   <div class="toast" id="toast"><span>✓</span><div><b id="toastTitle">Saved</b><small id="toastText">Your change is ready.</small></div></div>
   <div class="xp-burst" id="xpBurst"><span>✦</span><b id="xpBurstValue">+10 XP</b><small id="xpBurstText">Momentum earned</small></div>
-  <script src="app.js?v=cloud-foundation-v1"></script>
+  <script src="app.js?v=paper-scan-v1"></script>
   <script type="module" src="scene.js?v=cloud-foundation-v1"></script>
 </body>
 </html>

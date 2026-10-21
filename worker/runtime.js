@@ -15,6 +15,74 @@ function userFrom(request) {
   return { userId, email, name };
 }
 
+const ACCESS_COOKIE = "life_command_access";
+const SESSION_SECONDS = 60 * 60 * 24 * 30;
+const encoder = new TextEncoder();
+function cookieValue(request, name) {
+  const cookie = request.headers.get("cookie") || "";
+  for (const part of cookie.split(";")) {
+    const [key, ...value] = part.trim().split("=");
+    if (key === name) return value.join("=");
+  }
+  return null;
+}
+function base64url(bytes) {
+  let binary = "";
+  for (const byte of new Uint8Array(bytes)) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+async function digest(value) {
+  return new Uint8Array(await crypto.subtle.digest("SHA-256", encoder.encode(value)));
+}
+function equalBytes(left, right) {
+  if (left.length !== right.length) return false;
+  let mismatch = 0;
+  for (let index = 0; index < left.length; index++) mismatch |= left[index] ^ right[index];
+  return mismatch === 0;
+}
+async function signSession(expires, secret) {
+  const key = await crypto.subtle.importKey("raw", encoder.encode(secret), { name:"HMAC", hash:"SHA-256" }, false, ["sign"]);
+  return base64url(await crypto.subtle.sign("HMAC", key, encoder.encode(String(expires))));
+}
+async function secretMatches(candidate, secret) {
+  const [left, right] = await Promise.all([digest(candidate), digest(secret)]);
+  return equalBytes(left, right);
+}
+async function accessUser(request, env) {
+  const authenticated = userFrom(request);
+  if (authenticated) return authenticated;
+  if (!env.ACCESS_SECRET) return null;
+  const token = cookieValue(request, ACCESS_COOKIE);
+  if (!token) return null;
+  const [expiresText, signature] = token.split(".");
+  const expires = Number(expiresText);
+  if (!Number.isFinite(expires) || expires <= Math.floor(Date.now() / 1000) || !signature) return null;
+  const expected = await signSession(expiresText, env.ACCESS_SECRET);
+  if (!equalBytes(encoder.encode(signature), encoder.encode(expected))) return null;
+  return { userId:"private-workspace", email:"", name:"Private workspace" };
+}
+
+async function unlockRoute(request, env) {
+  if (request.method !== "POST") return json({ error:"Method not allowed" }, 405);
+  if (!sameOrigin(request)) return json({ error:"Origin rejected" }, 403);
+  if (!env.ACCESS_SECRET) return json({ error:"The private entrance is not configured" }, 503);
+  let body;
+  try { body = await request.json(); } catch { return json({ error:"Enter the secret word" }, 400); }
+  if (typeof body?.secret !== "string" || body.secret.length > 200) return json({ error:"Enter the secret word" }, 400);
+  if (!(await secretMatches(body.secret, env.ACCESS_SECRET))) return json({ error:"That secret word is not correct." }, 401);
+  const expires = Math.floor(Date.now() / 1000) + SESSION_SECONDS;
+  const signature = await signSession(expires, env.ACCESS_SECRET);
+  const response = json({ ok:true });
+  response.headers.append("set-cookie", `${ACCESS_COOKIE}=${expires}.${signature}; Path=/; Max-Age=${SESSION_SECONDS}; HttpOnly; Secure; SameSite=Strict`);
+  return response;
+}
+
+function logoutRoute() {
+  const response = json({ ok:true });
+  response.headers.append("set-cookie", `${ACCESS_COOKIE}=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Strict`);
+  return response;
+}
+
 function sameOrigin(request) {
   const origin = request.headers.get("origin");
   return !origin || origin === new URL(request.url).origin;
@@ -64,8 +132,10 @@ function asset(body, type) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    if (url.pathname === "/api/unlock") return unlockRoute(request, env);
+    if (url.pathname === "/api/logout") return request.method === "POST" && sameOrigin(request) ? logoutRoute() : json({ error:"Method not allowed" }, 405);
+    const user = await accessUser(request, env);
     if (url.pathname.startsWith("/api/")) {
-      const user = userFrom(request);
       if (!user) return json({ error: "Sign in required" }, 401);
       if (url.pathname === "/api/session") return json({ user: { email: user.email, name: user.name } });
       if (url.pathname === "/api/state") return stateRoute(request, env, user);
@@ -74,6 +144,7 @@ export default {
     if (url.pathname === "/styles.css") return asset(ASSETS.css, "text/css; charset=utf-8");
     if (url.pathname === "/app.js") return asset(ASSETS.app, "text/javascript; charset=utf-8");
     if (url.pathname === "/scene.js") return asset(ASSETS.scene, "text/javascript; charset=utf-8");
+    if (!user) return new Response(ASSETS.lock, { headers:{ "content-type":"text/html; charset=utf-8", "cache-control":"no-store" } });
     return asset(ASSETS.html, "text/html; charset=utf-8");
   },
 };

@@ -7,9 +7,18 @@ const source = await readFile(workerPath, "utf8");
 const moduleUrl = `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`;
 const worker = (await import(moduleUrl)).default;
 assert.equal(typeof worker?.fetch, "function");
-const page = await worker.fetch(new Request("https://example.test/"), {}, {});
+const lockEnv = { ACCESS_SECRET:"PaperOrbit-test" };
+const locked = await worker.fetch(new Request("https://example.test/"), lockEnv, {});
+assert.equal(locked.status, 200);
+assert.match(await locked.text(), /Enter your secret word/);
+const unlock = await worker.fetch(new Request("https://example.test/api/unlock", { method:"POST", headers:{ origin:"https://example.test", "content-type":"application/json" }, body:JSON.stringify({ secret:"PaperOrbit-test" }) }), lockEnv, {});
+assert.equal(unlock.status, 200);
+const cookie = unlock.headers.get("set-cookie").split(";")[0];
+const page = await worker.fetch(new Request("https://example.test/", { headers:{ cookie } }), lockEnv, {});
 assert.equal(page.status, 200);
-assert.match(await page.text(), /Life Command Center/);
+const pageHtml = await page.text();
+assert.match(pageHtml, /Life Command Center/);
+assert.match(pageHtml, /scanModal/);
 const unauthorized = await worker.fetch(new Request("https://example.test/api/state"), {}, {});
 assert.equal(unauthorized.status, 401);
 
@@ -25,4 +34,4 @@ const saved = await worker.fetch(new Request("https://example.test/api/state", {
 assert.equal(saved.status, 200);
 const conflict = await worker.fetch(new Request("https://example.test/api/state", { method:"PUT", headers:{...headers,"content-type":"application/json"}, body:JSON.stringify({ state:{ tasks:[] }, baseRevision:0 }) }), { DB }, {});
 assert.equal(conflict.status, 409);
-console.log("Worker, interface, authenticated persistence, and revision conflicts validated");
+console.log("Worker, private entrance, page scanner, persistence, and revision conflicts validated");

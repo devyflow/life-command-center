@@ -45,13 +45,14 @@ let state = (() => { try { return { ...clone(seed), ...JSON.parse(localStorage.g
 let ui = { view: 'today', space: null, category: null, planningDate: iso(), rescueId: null, timer: null, taskFilter: 'open' };
 let timerHandle = null;
 let sync = { ready: false, revision: 0, dirty: false, saving: false, timer: null, user: null };
-state.paper ||= { title: 'Everything on my mind', strokes: [], shapes: [], texts: [{ id: 9001, x: 7.5, y: 11.5, text: 'Do what matters. Leave room to breathe.', type: 'note' }], layout: {}, sequence: [] };
-state.paper.strokes ||= []; state.paper.shapes ||= []; state.paper.texts ||= []; state.paper.layout ||= {}; state.paper.sequence ||= [];
-state.preferences ||= { reminders: false, reminderLead: 10, notified: {} };
-state.tasks.forEach(task => {
-  task.paperMarks ||= { circle: task.paperEmphasis === 'circle', tick: false, box: task.paperEmphasis === 'box', star: task.paperEmphasis === 'star' };
-  task.repeat ||= 'none';
-});
+function normalizeStateShape() {
+  state.paper ||= { title: 'Everything on my mind', strokes: [], shapes: [], texts: [{ id: 9001, x: 7.5, y: 11.5, text: 'Do what matters. Leave room to breathe.', type: 'note' }], layout: {}, sequence: [] };
+  state.paper.strokes ||= []; state.paper.shapes ||= []; state.paper.texts ||= []; state.paper.layout ||= {}; state.paper.sequence ||= []; state.paper.imports ||= [];
+  state.preferences ||= { reminders: false, reminderLead: 10, notified: {} };
+  state.tasks ||= [];
+  state.tasks.forEach(task => { task.paperMarks ||= { circle: task.paperEmphasis === 'circle', tick: false, box: task.paperEmphasis === 'box', star: task.paperEmphasis === 'star' }; task.repeat ||= 'none'; });
+}
+normalizeStateShape();
 function setSyncStatus(text, mode = '') {
   const el = $('#syncStatus'); if (!el) return; el.textContent = text; el.dataset.mode = mode;
 }
@@ -71,7 +72,7 @@ async function pushCloudState(force = false) {
     const result = await response.json();
     if (response.status === 409) {
       const localTime = Date.parse(state.meta?.updatedAt || 0), remoteTime = Date.parse(result.state?.meta?.updatedAt || 0);
-      if (remoteTime > localTime) { state = result.state; sync.revision = result.revision; sync.dirty = false; saveLocal(); render(); toast('Newer cloud changes loaded','This browser is now up to date.'); }
+      if (remoteTime > localTime) { state = result.state; normalizeStateShape(); sync.revision = result.revision; sync.dirty = false; saveLocal(); render(); toast('Newer cloud changes loaded','This browser is now up to date.'); }
       else { sync.revision = result.revision; sync.saving = false; return pushCloudState(true); }
     } else if (!response.ok) throw new Error(result.error || 'Cloud save failed');
     else { sync.revision = result.revision; sync.dirty = false; setSyncStatus('Cloud synced', 'synced'); }
@@ -83,7 +84,7 @@ async function pullCloudState() {
   try {
     const response = await fetch('/api/state', { cache:'no-store' }); if (!response.ok) return;
     const result = await response.json();
-    if (result.state && result.revision > sync.revision) { state = result.state; sync.revision = result.revision; saveLocal(); render(); setSyncStatus('Updated from cloud','synced'); }
+    if (result.state && result.revision > sync.revision) { state = result.state; normalizeStateShape(); sync.revision = result.revision; saveLocal(); render(); setSyncStatus('Updated from cloud','synced'); }
   } catch {}
 }
 async function initializeCloud() {
@@ -94,7 +95,7 @@ async function initializeCloud() {
     sync.user = session.user; sync.revision = remote.revision || 0;
     $('#accountName').textContent = session.user.name || session.user.email || 'Your command center';
     $('#accountAvatar').textContent = (session.user.name || session.user.email || 'A').trim().charAt(0).toUpperCase();
-    if (remote.state) { state = remote.state; state.preferences ||= { reminders:false, reminderLead:10, notified:{} }; state.tasks.forEach(t=>{t.paperMarks||={circle:false,tick:false,box:false,star:false};t.repeat||='none';}); saveLocal(); render(); updateReminderUI(); }
+    if (remote.state) { state = remote.state; normalizeStateShape(); saveLocal(); render(); updateReminderUI(); }
     sync.ready = true; setSyncStatus('Cloud synced','synced');
     if (!remote.state) { sync.dirty = true; await pushCloudState(); }
     setInterval(pullCloudState, 15000);
@@ -296,20 +297,20 @@ function paperView() {
     if(ai>=0||bi>=0) return (ai<0?999:ai)-(bi<0?999:bi);
     return a.id-b.id;
   });
-  return `${pageHead('WHEN STRUCTURE FAILS, USE THE PAGE', `Your paper page.<br><em>See everything at once.</em>`, `<span class="paper-page-count">${tasks.length} visible tasks on one page</span>`)}
+  return `${pageHead('WHEN STRUCTURE FAILS, USE THE PAGE', `Your paper page.<br><em>See everything at once.</em>`, `<span class="paper-page-count">${tasks.length} visible tasks on one page</span><button class="primary" data-open-scan>▧ Scan a page</button>`)}
     <section class="paper-shell">
       ${taskFilterBar()}
       <div class="paper-toolbar" role="toolbar" aria-label="Paper tools">
         ${[['select','↖','Move'],['pen','✎','Pen'],['text','T','Text'],['heading','H','Heading'],['circle','◯','Circle'],['box','□','Box'],['tick','✓','Tick'],['eraser','⌫','Eraser']].map(([tool,icon,label])=>`<button class="paper-tool ${tool==='select'?'active':''}" data-paper-tool="${tool}" title="${label}"><span>${icon}</span><b>${label}</b></button>`).join('')}
         <form class="paper-quick" id="paperQuickForm"><input id="paperQuickInput" placeholder="Write a task straight onto the page…"><button>Add task</button></form>
-        <button class="paper-save" data-paper-order>Use page order</button><button class="paper-save" data-clear-ink>Clear ink</button>
+        <button class="paper-save paper-scan-shortcut" data-open-scan>▧ Scan</button><button class="paper-save" data-paper-order>Use page order</button><button class="paper-save" data-clear-ink>Clear ink</button>
       </div>
       <div class="paper-board-wrap"><div class="paper-board" id="paperBoard" data-tool="select">
         <canvas id="paperCanvas" width="1180" height="980"></canvas>
         <div class="paper-title" id="paperTitle" contenteditable="true" spellcheck="false">${esc(state.paper.title)}</div>
         <span class="paper-hint">DRAG · WRITE · CIRCLE · CHECK · REORDER</span>
         ${paperHeadings(tasks)}
-        ${ordered.map((task,index)=>{const p=paperPosition(task,index,tasks);const order=state.paper.sequence.indexOf(task.id);const classes=['circle','tick','box','star'].filter(mark=>hasMark(task,mark)).map(mark=>`mark-${mark}`).join(' ');return `<article class="paper-task ${task.progress>=100?'is-done':''} ${classes}" data-paper-task="${task.id}" style="left:${p.x}%;top:${p.y}%"><button class="paper-check" data-paper-complete="${task.id}" aria-label="Toggle completion">${task.progress>=100?'✓':''}</button><b>${esc(task.title)}</b><small>${esc(task.category)} · ${task.progress}%</small>${order>=0?`<span class="paper-seq">#${order+1}</span>`:''}${taskMarkButtons(task,true)}</article>`}).join('')}
+        ${ordered.map((task,index)=>{const p=paperPosition(task,index,tasks);const order=state.paper.sequence.indexOf(task.id);const classes=['circle','tick','box','star'].filter(mark=>hasMark(task,mark)).map(mark=>`mark-${mark}`).join(' ');return `<article class="paper-task ${task.progress>=100?'is-done':''} ${classes}" data-paper-task="${task.id}" style="left:${p.x}%;top:${p.y}%"><button class="paper-check" data-paper-complete="${task.id}" aria-label="Toggle completion">${task.progress>=100?'✓':''}</button><button class="paper-edit" data-paper-edit="${task.id}" aria-label="Edit ${esc(task.title)}" title="Edit task">✎</button><b>${esc(task.title)}</b><small>${esc(task.category)} · ${task.progress}%</small>${order>=0?`<span class="paper-seq">#${order+1}</span>`:''}${taskMarkButtons(task,true)}</article>`}).join('')}
         ${state.paper.texts.map(note=>`<div class="paper-text ${note.type==='heading'?'heading':''}" contenteditable="true" spellcheck="false" data-paper-text="${note.id}" style="left:${note.x}%;top:${note.y}%">${esc(note.text)}</div>`).join('')}
       </div></div>
       <div class="paper-key"><span><b>◯ Important</b><b>✓ Ready to act</b><b>□ Protected time</b><b>★ Today focus</b></span><span>Marks, completion and progress stay synchronized with Tasks.</span></div>
@@ -420,7 +421,8 @@ function openSearch() { openModal('searchModal'); $('#globalSearch').value=''; r
 
 const TASK_CATEGORIES = { Career:['College','DSA','Meetings','Projects'], Personal:['Health','Home','Relationships'], Growth:['Learning','Reading','Skills'] };
 function setTaskCategories(area, selected = '') {
-  $('#taskCategory').innerHTML = TASK_CATEGORIES[area].map(x=>`<option ${x===selected?'selected':''}>${x}</option>`).join('');
+  const options=[...(TASK_CATEGORIES[area]||[])];if(selected&&!options.includes(selected))options.unshift(selected);
+  $('#taskCategory').innerHTML = options.map(x=>`<option ${x===selected?'selected':''}>${esc(x)}</option>`).join('');
 }
 function openTaskEditor(task = null) {
   ui.editTaskId = task?.id || null;
@@ -437,6 +439,115 @@ function openTaskEditor(task = null) {
   $('#taskTimer').checked = task ? Boolean(task.timer) : true; $('#taskPublish').checked = Boolean(task?.publish); $('#taskCalendar').checked = Boolean(task?.calendar);
   $('#taskCircle').checked = hasMark(task || {},'circle'); $('#taskReady').checked = hasMark(task || {},'tick'); $('#taskBox').checked = hasMark(task || {},'box'); $('#taskStar').checked = hasMark(task || {},'star');
   openModal('taskModal'); setTimeout(()=>$('#taskTitle').focus(),80);
+}
+
+const OCR_SCRIPT = 'https://cdn.jsdelivr.net/npm/tesseract.js@6.0.1/dist/tesseract.min.js';
+let scanRuntime = { file:null, previewUrl:null, candidates:[], running:false, worker:null, libraryPromise:null, confidence:null };
+
+function setScanStatus(title, detail = '', mode = 'idle') {
+  const status=$('#scanStatus'); if(!status)return; status.dataset.state=mode;
+  status.innerHTML=`<b>${esc(title)}</b><span>${esc(detail)}</span>`;
+}
+function updateScanSelection() {
+  const selected=scanRuntime.candidates.filter(item=>item.included&&item.text.trim()).length;
+  const count=$('#scanSelectionCount'),button=$('#scanImport');
+  if(count)count.textContent=selected?`${selected} item${selected===1?'':'s'} selected for Paper.`:'No items selected yet.';
+  if(button)button.disabled=!selected||scanRuntime.running;
+}
+function renderScanCandidates() {
+  const root=$('#scanCandidates'); if(!root)return;
+  if(!scanRuntime.candidates.length){root.innerHTML='<div class="scan-empty"><b>1</b><span>Choose a photo or screenshot.</span><b>2</b><span>Correct the detected lines.</span><b>3</b><span>Add them to your Paper page.</span></div>';$('#scanReviewTitle').textContent='Your editable review will appear here.';updateScanSelection();return;}
+  $('#scanReviewTitle').textContent=`Review ${scanRuntime.candidates.length} detected line${scanRuntime.candidates.length===1?'':'s'}.`;
+  root.innerHTML=scanRuntime.candidates.map(item=>`<div class="scan-candidate ${item.included?'':'excluded'}" data-scan-candidate="${item.id}">
+    <label class="scan-include" title="Include on Paper"><input type="checkbox" data-scan-include="${item.id}" ${item.included?'checked':''}><span>✓</span></label>
+    <input class="scan-line-text" data-scan-text="${item.id}" value="${esc(item.text)}" aria-label="Detected text">
+    <select data-scan-kind="${item.id}" aria-label="Item type"><option value="task" ${item.kind==='task'?'selected':''}>Task</option><option value="heading" ${item.kind==='heading'?'selected':''}>Heading</option><option value="note" ${item.kind==='note'?'selected':''}>Note</option></select>
+    <label class="scan-important" title="Mark important"><input type="checkbox" data-scan-important="${item.id}" ${item.important?'checked':''}><span>◯</span></label>
+    ${item.completed?'<small class="scan-done-badge">DONE</small>':''}
+  </div>`).join('');
+  updateScanSelection();
+}
+function parseScanText(raw) {
+  const seen=new Set();
+  return String(raw||'').replace(/\r/g,'').split('\n').map(line=>line.replace(/\s+/g,' ').trim()).filter(Boolean).map(line=>{
+    const completed=/^(?:\[\s*[xX✓✔]\s*\]|☑|✓|✔)\s*/.test(line);
+    const important=/^(?:!{1,2}|★|\*)\s*/.test(line);
+    let text=line.replace(/^(?:\[\s*[xX✓✔ ]?\s*\]|☐|☑|✓|✔|[-•·▪◦–—]|!{1,2}|★|\*)\s*/,'').replace(/^\d{1,2}[.)]\s+/,'').trim();
+    if(text.length<2)return null;
+    const key=text.toLowerCase();if(seen.has(key))return null;seen.add(key);
+    const heading=/:$/.test(text)||(text.length<=45&&/[A-Z]/.test(text)&&text===text.toUpperCase());
+    return {id:uid(),text:text.replace(/:$/,'').trim(),kind:heading?'heading':text.length>115?'note':'task',included:true,completed,important};
+  }).filter(Boolean).slice(0,80);
+}
+function loadOcrLibrary() {
+  if(window.Tesseract)return Promise.resolve(window.Tesseract);
+  if(scanRuntime.libraryPromise)return scanRuntime.libraryPromise;
+  scanRuntime.libraryPromise=new Promise((resolve,reject)=>{
+    const script=document.createElement('script');script.src=OCR_SCRIPT;script.async=true;script.crossOrigin='anonymous';script.referrerPolicy='no-referrer';
+    script.onload=()=>window.Tesseract?resolve(window.Tesseract):reject(new Error('OCR engine did not start'));
+    script.onerror=()=>reject(new Error('OCR engine could not be downloaded'));
+    document.head.appendChild(script);
+  });
+  return scanRuntime.libraryPromise;
+}
+async function recognizeScan() {
+  if(!scanRuntime.file||scanRuntime.running)return;
+  scanRuntime.running=true;scanRuntime.candidates=[];scanRuntime.confidence=null;renderScanCandidates();
+  $('#scanRetry').hidden=true;$('#scanProgress').hidden=false;$('#scanProgressBar').style.width='2%';
+  setScanStatus('Preparing recognition…','The first scan can take a little longer.','working');updateScanSelection();
+  try {
+    const Tesseract=await loadOcrLibrary();
+    scanRuntime.worker=await Tesseract.createWorker('eng',1,{logger:message=>{
+      const progress=Math.max(0,Math.min(1,Number(message.progress||0)));
+      $('#scanProgressBar').style.width=`${Math.max(3,Math.round(progress*100))}%`;
+      const label=message.status?message.status.replace(/_/g,' '):'Reading the page';
+      setScanStatus(label.charAt(0).toUpperCase()+label.slice(1),progress?`${Math.round(progress*100)}% complete`:'This stays on your device.','working');
+    }});
+    const result=await scanRuntime.worker.recognize(scanRuntime.file);
+    scanRuntime.confidence=Math.round(result.data.confidence||0);scanRuntime.candidates=parseScanText(result.data.text);
+    $('#scanConfidence').textContent=scanRuntime.candidates.length?`${scanRuntime.confidence}% OCR confidence`:'';
+    if(scanRuntime.candidates.length)setScanStatus('Page read successfully.',`${scanRuntime.candidates.length} editable items are ready for review.`,'done');
+    else setScanStatus('No clear lines were found.','Try a straighter photo with stronger light, or add a line manually.','error');
+  } catch(error) {
+    setScanStatus('The page could not be read.',error?.message||'Try another image or a clearer photo.','error');
+  } finally {
+    if(scanRuntime.worker){try{await scanRuntime.worker.terminate();}catch{}scanRuntime.worker=null;}
+    scanRuntime.running=false;$('#scanProgress').hidden=true;$('#scanRetry').hidden=false;renderScanCandidates();
+  }
+}
+function resetScan() {
+  if(scanRuntime.previewUrl)URL.revokeObjectURL(scanRuntime.previewUrl);
+  scanRuntime.file=null;scanRuntime.previewUrl=null;scanRuntime.candidates=[];scanRuntime.running=false;scanRuntime.confidence=null;
+  const image=$('#scanPreview');image.hidden=true;image.removeAttribute('src');$('#scanPlaceholder').hidden=false;$('#scanProgress').hidden=true;$('#scanRetry').hidden=true;$('#scanConfidence').textContent='';
+  setScanStatus('Ready when you are.','Nothing leaves this browser until you add the detected items.');renderScanCandidates();
+}
+function openScan() { resetScan();openModal('scanModal'); }
+function acceptScanFile(file) {
+  if(!file)return;
+  if(!file.type.startsWith('image/')){setScanStatus('Choose an image file.','PNG, JPG and WebP files are supported.','error');return;}
+  if(file.size>20*1024*1024){setScanStatus('That image is too large.','Choose an image under 20 MB.','error');return;}
+  if(scanRuntime.previewUrl)URL.revokeObjectURL(scanRuntime.previewUrl);
+  scanRuntime.file=file;scanRuntime.previewUrl=URL.createObjectURL(file);
+  const image=$('#scanPreview');image.src=scanRuntime.previewUrl;image.hidden=false;$('#scanPlaceholder').hidden=true;
+  setScanStatus('Image ready.','Reading it now…','working');recognizeScan();
+}
+function addManualScanLine() {
+  scanRuntime.candidates.push({id:uid(),text:'Edit this line',kind:'task',included:true,completed:false,important:false});renderScanCandidates();
+  const inputs=$$('#scanCandidates .scan-line-text');inputs.at(-1)?.focus();inputs.at(-1)?.select();
+}
+function importScanToPaper() {
+  const selected=scanRuntime.candidates.filter(item=>item.included&&item.text.trim());if(!selected.length)return;
+  const area=$('#scanArea').value,category=$('#scanCategory').value.trim()||'Scanned page',areaIndex=Math.max(0,['Career','Personal','Growth'].indexOf(area));
+  let taskCount=0,noteCount=0;
+  selected.forEach((item,index)=>{
+    if(item.kind==='task'){
+      const id=uid()+index;state.tasks.push({id,title:item.text.trim(),area,category,duration:30,energy:'medium',date:null,start:null,plan:'inbox',progress:item.completed?100:0,next:'Clarify the first action from this page',timer:false,publish:false,calendar:false,repeat:'none',postponed:0,createdAt:new Date().toISOString(),source:'page-scan',paperMarks:{circle:item.important,tick:false,box:false,star:false}});state.paper.sequence.push(id);taskCount++;
+    } else {
+      const existing=state.paper.texts.length;state.paper.texts.push({id:uid()+index,x:6.2+areaIndex*31.3,y:Math.min(91,77+(existing%3)*5.4),text:item.text.trim(),type:item.kind==='heading'?'heading':'text',source:'page-scan'});noteCount++;
+    }
+  });
+  state.paper.imports.unshift({id:uid(),fileName:scanRuntime.file?.name||'Camera scan',importedAt:new Date().toISOString(),confidence:scanRuntime.confidence,count:selected.length});state.paper.imports=state.paper.imports.slice(0,20);
+  save();reward(Math.min(25,5+selected.length*2),'A paper page became an actionable plan');closeModal('scanModal');ui.view='paper';render();toast('Page added to Paper',`${taskCount} task${taskCount===1?'':'s'}${noteCount?` and ${noteCount} editable heading${noteCount===1?'':'s'}`:''} now sync everywhere.`);resetScan();
 }
 
 let paperRuntime = { tool: 'select', stroke: null, shape: null, drag: null };
@@ -475,6 +586,8 @@ function initPaperBoard() {
 document.addEventListener('click', event => {
   const view = event.target.closest('[data-view]'); if (view) { event.preventDefault(); setView(view.dataset.view); return; }
   const taskFilter = event.target.closest('[data-task-filter]'); if (taskFilter) { ui.taskFilter = taskFilter.dataset.taskFilter; render(); return; }
+  if(event.target.closest('[data-open-scan]')){openScan();return;}
+  if(event.target.closest('[data-scan-add-line]')){addManualScanLine();return;}
   const opener = event.target.closest('[data-open]'); if (opener) { opener.dataset.open==='taskModal'?openTaskEditor():openModal(opener.dataset.open); return; }
   const closer = event.target.closest('[data-close]'); if (closer) { closeModal(closer.dataset.close); return; }
   if (event.target.closest('[data-attention-open]')) { setView('all'); return; }
@@ -482,6 +595,7 @@ document.addEventListener('click', event => {
   const placeTask = event.target.closest('[data-place-task]'); if (placeTask) { const task=state.tasks.find(t=>t.id===Number(placeTask.dataset.placeTask)); if(task) ui.planningDate=task.date||iso(); setView('planner'); return; }
   const searchTask = event.target.closest('[data-search-task]'); if(searchTask){const task=state.tasks.find(t=>t.id===Number(searchTask.dataset.searchTask));ui.allQuery=task?.title||'';closeModal('searchModal');setView('all');return;}
   const taskMark=event.target.closest('[data-task-mark]');if(taskMark){const task=state.tasks.find(t=>t.id===Number(taskMark.dataset.taskMarkId));if(task){task.paperMarks||={circle:false,tick:false,box:false,star:false};const mark=taskMark.dataset.taskMark;task.paperMarks[mark]=!task.paperMarks[mark];save();render();toast(task.paperMarks[mark]?`${taskMark.title} marked`:`${taskMark.title} removed`,'The mark changed on both Paper and Tasks.');}return;}
+  const paperEdit=event.target.closest('[data-paper-edit]');if(paperEdit){const task=state.tasks.find(t=>t.id===Number(paperEdit.dataset.paperEdit));if(task)openTaskEditor(task);return;}
   const paperComplete=event.target.closest('[data-paper-complete]');if(paperComplete){const task=state.tasks.find(t=>t.id===Number(paperComplete.dataset.paperComplete));if(task)updateProgress(task.id,task.progress>=100?0:100);return;}
   if(event.target.closest('[data-paper-order]')){const open=state.tasks.filter(t=>t.progress<100);state.paper.sequence=open.sort((a,b)=>{const pa=state.paper.layout[a.id]||paperPosition(a,open.indexOf(a),open),pb=state.paper.layout[b.id]||paperPosition(b,open.indexOf(b),open);return Math.abs(pa.y-pb.y)>4?pa.y-pb.y:pa.x-pb.x;}).map(t=>t.id);save();render();reward(10,'Your visual sequence now guides task views');toast('Page order saved','Sequence numbers now appear across the website.');return;}
   if(event.target.closest('[data-clear-ink]')){state.paper.strokes=[];state.paper.shapes=[];save();drawPaperCanvas();toast('Ink cleared','Tasks and written notes stayed on the page.');return;}
@@ -529,8 +643,14 @@ document.addEventListener('input', event => {
   if (event.target.matches('[data-progress]')) event.target.nextElementSibling.textContent = `${event.target.value}%`;
   if (event.target.id === 'globalSearch') renderSearchResults(event.target.value);
   if (event.target.id === 'allSearch') { ui.allQuery = event.target.value; const caret=event.target.selectionStart; render(); const next=$('#allSearch'); next.focus(); next.setSelectionRange(caret,caret); }
+  if(event.target.matches('[data-scan-text]')){const item=scanRuntime.candidates.find(x=>x.id===Number(event.target.dataset.scanText));if(item)item.text=event.target.value;updateScanSelection();}
 });
-document.addEventListener('change', event => { if (event.target.matches('[data-progress]')) updateProgress(Number(event.target.closest('[data-task]').dataset.task), event.target.value); });
+document.addEventListener('change', event => {
+  if (event.target.matches('[data-progress]')) updateProgress(Number(event.target.closest('[data-task]').dataset.task), event.target.value);
+  if(event.target.matches('[data-scan-include]')){const item=scanRuntime.candidates.find(x=>x.id===Number(event.target.dataset.scanInclude));if(item)item.included=event.target.checked;event.target.closest('.scan-candidate')?.classList.toggle('excluded',!event.target.checked);updateScanSelection();}
+  if(event.target.matches('[data-scan-kind]')){const item=scanRuntime.candidates.find(x=>x.id===Number(event.target.dataset.scanKind));if(item)item.kind=event.target.value;}
+  if(event.target.matches('[data-scan-important]')){const item=scanRuntime.candidates.find(x=>x.id===Number(event.target.dataset.scanImportant));if(item)item.important=event.target.checked;}
+});
 
 $('#captureTrigger').addEventListener('click',()=>openTaskEditor()); $('#mobileAdd').addEventListener('click',()=>openTaskEditor());
 $('#searchTrigger').addEventListener('click',openSearch); $('#mobileSearch').addEventListener('click',openSearch);
@@ -538,6 +658,10 @@ $$('[data-view]').forEach(control => control.addEventListener('click', event => 
 $('#menuBtn').addEventListener('click',()=>$('#sidebar').classList.toggle('open'));
 $('#focusBtn').addEventListener('click',()=>{document.body.classList.toggle('focus-mode');toast(document.body.classList.contains('focus-mode')?'Focus mode on':'Focus mode off');});
 $('#reminderBtn').addEventListener('click',toggleReminders);
+$('#lockWorkspace').addEventListener('click',async()=>{try{await fetch('/api/logout',{method:'POST'});}finally{location.replace('/');}});
+$('#scanCamera').addEventListener('change',event=>{acceptScanFile(event.target.files?.[0]);event.target.value='';});
+$('#scanUpload').addEventListener('change',event=>{acceptScanFile(event.target.files?.[0]);event.target.value='';});
+$('#scanRetry').addEventListener('click',recognizeScan);$('#scanImport').addEventListener('click',importScanToPaper);
 $('#taskArea').addEventListener('change',()=>setTaskCategories($('#taskArea').value));
 $('#taskForm').addEventListener('submit', event => {
   event.preventDefault(); const plan=$('#taskPlan').value, date=$('#taskDate').value || (plan==='inbox'?null:iso());
@@ -551,7 +675,7 @@ $('#taskDelete').addEventListener('click',()=>{const id=ui.editTaskId;if(!id)ret
 $('#freeForm').addEventListener('submit',event=>{event.preventDefault();state.availability.push({id:uid(),date:$('#freeDate').value,start:$('#freeStart').value,end:$('#freeEnd').value,label:$('#freeLabel').value,max:Number($('#freeMax').value)});save();closeModal('freeModal');toast('Free time published','Visitors can request this window, subject to approval.');render();});
 $('#timerToggle').addEventListener('click',()=>{if(!ui.timer)return;ui.timer.running=!ui.timer.running;$('#timerToggle').textContent=ui.timer.running?'Ⅱ':'▶';});
 $('#timerStop').addEventListener('click',finishTimer); $('#timerClose').addEventListener('click',closeTimer);
-$('#resetBtn').addEventListener('click',()=>{state=clone(seed);state.tasks.forEach(task=>{task.paperMarks={circle:false,tick:false,box:false,star:false};task.repeat='none';});state.paper={title:'Everything on my mind',strokes:[],shapes:[],texts:[{id:9001,x:7.5,y:11.5,text:'Do what matters. Leave room to breathe.',type:'note'}],layout:{},sequence:[]};state.preferences={reminders:false,reminderLead:10,notified:{}};save();ui={view:'today',space:null,category:null,planningDate:iso(),rescueId:null,timer:null,taskFilter:'open'};closeTimer();render();updateReminderUI();toast('Demo restored','All sample data is back.');});
+$('#resetBtn').addEventListener('click',()=>{state=clone(seed);state.tasks.forEach(task=>{task.paperMarks={circle:false,tick:false,box:false,star:false};task.repeat='none';});state.paper={title:'Everything on my mind',strokes:[],shapes:[],texts:[{id:9001,x:7.5,y:11.5,text:'Do what matters. Leave room to breathe.',type:'note'}],layout:{},sequence:[],imports:[]};state.preferences={reminders:false,reminderLead:10,notified:{}};save();ui={view:'today',space:null,category:null,planningDate:iso(),rescueId:null,timer:null,taskFilter:'open'};closeTimer();render();updateReminderUI();toast('Demo restored','All sample data is back.');});
 $$('.modal-layer').forEach(layer=>layer.addEventListener('click',e=>{if(e.target===layer)closeModal(layer.id);}));
 document.addEventListener('keydown',e=>{const typing=['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName);if((e.key==='c'||e.key==='C')&&!typing)openTaskEditor();if(e.key==='/'&&!typing){e.preventDefault();openSearch();}if(e.key==='Escape')$$('.modal-layer.open').forEach(m=>closeModal(m.id));});
 
