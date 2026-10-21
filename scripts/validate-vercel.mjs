@@ -23,8 +23,8 @@ const unlocked=response();await unlock(request("POST",{host:"example.test",origi
 const cookie=unlocked.headers["set-cookie"].split(";")[0];
 const authorized=response();session(request("GET",{cookie}),authorized);assert.equal(authorized.statusCode,200);
 const app=response();page(request("GET",{cookie}),app);assert.match(app.body,/Life Command Center/);assert.match(app.body,/scanModal/);
-assert.match(app.body,/settingsModal/);assert.match(app.body,/manifest\.webmanifest/);assert.match(app.body,/Auto enhance/);assert.match(app.body,/English \+ Hindi/);
+assert.match(app.body,/settingsModal/);assert.match(app.body,/manifest\.webmanifest/);assert.match(app.body,/Auto enhance/);assert.match(app.body,/English \+ Hindi/);assert.match(app.body,/Clear history/);
 const appSource=await readFile(resolve(import.meta.dirname,"../client/app.js"),"utf8");
-assert.match(appSource,/data-planner-time/);assert.match(appSource,/exportBackup/);assert.match(appSource,/saveTaxonomy/);assert.match(appSource,/prepareScanVariants/);assert.match(appSource,/tessedit_pageseg_mode/);
+assert.match(appSource,/data-planner-time/);assert.match(appSource,/exportBackup/);assert.match(appSource,/saveTaxonomy/);assert.match(appSource,/prepareScanVariants/);assert.match(appSource,/tessedit_pageseg_mode/);assert.match(appSource,/clearCompletedHistory/);assert.match(appSource,/completedHistoryClearedAt/);
 for(const file of ["manifest.webmanifest","sw.js","icon-192.png","icon-512.png"])await access(resolve(import.meta.dirname,"../client",file));
 console.log("Vercel entrance, cloud shell, scanner, planner, backups, taxonomy, and PWA validated");

@@ -157,7 +157,7 @@ function openSettings(){
   taxonomyDraft=taxonomyDraftFromState();renderTaxonomyEditor();
   $('#settingsSync').textContent=$('#syncStatus').textContent||'Cloud status unavailable';
   $('#settingsUpdated').textContent=state.meta?.updatedAt?new Date(state.meta.updatedAt).toLocaleString():'No changes yet';
-  $('#reminderLead').value=String(state.preferences.reminderLead||10);openModal('settingsModal');
+  $('#reminderLead').value=String(state.preferences.reminderLead||10);updateCompletedHistoryControl();openModal('settingsModal');
 }
 function saveTaxonomy(){
   const clean=taxonomyDraft.map(area=>({name:area.name.trim(),color:area.color,categories:area.categories.map(c=>c.name.trim()).filter(Boolean)}));
@@ -175,6 +175,24 @@ function saveTaxonomy(){
 function exportBackup(){
   const payload={format:'life-command-center',version:1,exportedAt:new Date().toISOString(),state};
   const href=URL.createObjectURL(new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}));const link=document.createElement('a');link.href=href;link.download=`life-command-backup-${iso()}.json`;link.click();setTimeout(()=>URL.revokeObjectURL(href),1000);toast('Backup downloaded','Keep it somewhere private.');
+}
+function updateCompletedHistoryControl(){
+  const count=state.tasks.filter(task=>task.progress>=100).length,button=$('#clearCompletedHistory'),label=$('#completedHistoryCount'),panel=button?.closest('.history-clear-panel');
+  if(label)label.textContent=count?`${count} completed task${count===1?'':'s'} will be removed.`:state.meta?.completedHistoryClearedAt?`Last cleared ${new Date(state.meta.completedHistoryClearedAt).toLocaleString()}.`:'No completed tasks to clear.';
+  if(button){button.disabled=!count;button.textContent=count?`Clear ${count} completed`:'Clear history';}
+  panel?.classList.toggle('is-ready',Boolean(count));
+}
+function clearCompletedHistory(){
+  const completed=state.tasks.filter(task=>task.progress>=100);if(!completed.length){toast('History is already clear','There are no completed tasks to remove.');return;}
+  const ids=new Set(completed.map(task=>task.id));
+  state.tasks=state.tasks.filter(task=>!ids.has(task.id));
+  state.paper.sequence=state.paper.sequence.filter(id=>!ids.has(id));
+  ids.forEach(id=>delete state.paper.layout[id]);
+  if(state.preferences?.notified)Object.keys(state.preferences.notified).forEach(key=>{if(ids.has(Number(key.split(':')[0])))delete state.preferences.notified[key];});
+  if(ui.plannerSelected&&ids.has(ui.plannerSelected))ui.plannerSelected=null;
+  if(ui.timer&&ids.has(ui.timer.taskId))closeTimer();
+  state.meta={...(state.meta||{}),completedHistoryClearedAt:new Date().toISOString(),completedHistoryClearedCount:completed.length};
+  save();render();updateCompletedHistoryControl();toast('Completed history cleared',`${completed.length} completed task${completed.length===1?' was':'s were'} removed everywhere. Your XP and streak were kept.`);
 }
 async function importBackupFile(file){
   try{
@@ -780,6 +798,7 @@ $('#scanRetry').addEventListener('click',recognizeScan);$('#scanImport').addEven
 $('#scanMode').addEventListener('change',event=>{$('#scanQualityTip').textContent=event.target.value==='handwriting'?'Handwriting mode uses strong local contrast and sparse-text reading. Keep the page flat and fill most of the photo.':event.target.value==='printed'?'Printed mode is faster for clean documents and screenshots.':'Auto enhance corrects lighting and tries two reading styles. Choose Handwriting for notes written with a pen.';if(scanRuntime.file)recognizeScan();});
 $('#scanLanguage').addEventListener('change',()=>{if(scanRuntime.file)recognizeScan();});
 $('#exportBackup').addEventListener('click',exportBackup);
+$('#clearCompletedHistory').addEventListener('click',clearCompletedHistory);
 $('#importBackup').addEventListener('change',event=>{const file=event.target.files?.[0];if(file)importBackupFile(file);event.target.value='';});
 $('#installApp').addEventListener('click',installWebsite);
 $('#reminderLead').addEventListener('change',event=>{state.preferences.reminderLead=Number(event.target.value);save();toast('Reminder timing saved',`Alerts will appear ${event.target.value} minutes before scheduled work.`);});

@@ -118,6 +118,7 @@
           <div class="settings-actions"><button class="primary" type="button" id="exportBackup">Download backup</button><label class="secondary settings-file">Restore backup<input id="importBackup" type="file" accept="application/json,.json" hidden></label><button class="secondary" type="button" id="installApp" hidden>Install website app</button></div>
           <div class="settings-status"><span><b id="settingsSync">Cloud synced</b><small>Shared across signed-in devices</small></span><span><b id="settingsUpdated">No changes yet</b><small>Latest saved change</small></span></div>
           <label class="settings-select">Reminder lead time<select id="reminderLead"><option value="5">5 minutes</option><option value="10">10 minutes</option><option value="15">15 minutes</option><option value="30">30 minutes</option><option value="60">1 hour</option></select></label>
+          <div class="history-clear-panel"><div><b>Completed task history</b><small id="completedHistoryCount">No completed tasks to clear.</small><p>Completed tasks stay visible until you clear them manually. Clearing removes them from Tasks, Search, Paper, Planner and cloud storage. Your XP and streak remain.</p></div><button class="danger-button" type="button" id="clearCompletedHistory">Clear history</button></div>
         </section>
         <section class="settings-panel taxonomy-panel">
           <div class="settings-panel-head"><div><p class="eyebrow">MY LIFE</p><h3>Areas and categories</h3></div><button class="secondary" type="button" id="addArea">+ Area</button></div>
@@ -173,7 +174,7 @@
   <div class="timer-dock" id="timerDock"><button class="timer-ring" id="timerToggle">▶</button><div><small>FOCUSING ON</small><strong id="timerTask">Task</strong></div><time id="timerTime">25:00</time><button class="timer-stop" id="timerStop">Finish session</button><button class="bare" id="timerClose">×</button></div>
   <div class="toast" id="toast"><span>✓</span><div><b id="toastTitle">Saved</b><small id="toastText">Your change is ready.</small></div></div>
   <div class="xp-burst" id="xpBurst"><span>✦</span><b id="xpBurstValue">+10 XP</b><small id="xpBurstText">Momentum earned</small></div>
-  <script src="app.js?v=ocr-v2"></script>
+  <script src="app.js?v=history-v1"></script>
   <script type="module" src="scene.js?v=cloud-foundation-v1"></script>
 </body>
 </html>
