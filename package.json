@@ -4,6 +4,11 @@
   "type": "module",
   "scripts": {
     "build": "node scripts/build.mjs",
-    "validate": "node scripts/validate-artifact.mjs"
+    "validate": "node scripts/validate-artifact.mjs",
+    "build:vercel": "node scripts/build-vercel.mjs",
+    "validate:vercel": "node scripts/validate-vercel.mjs"
+  },
+  "devDependencies": {
+    "vercel": "^65.0.0"
   }
 }
