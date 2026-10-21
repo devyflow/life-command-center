@@ -1,7 +1,8 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 
 export const ACCESS_COOKIE = "life_command_access";
-export const SESSION_SECONDS = 60 * 60 * 24 * 30;
+export const SESSION_SECONDS = 60 * 60 * 12;
+export const REMEMBERED_SESSION_SECONDS = 60 * 60 * 24 * 365;
 
 export function json(response, value, status = 200) {
   response.statusCode = status;
@@ -23,8 +24,8 @@ function signature(expires, secret) {
   return createHmac("sha256", secret).update(String(expires)).digest("base64url");
 }
 
-export function createSession(secret) {
-  const expires = Math.floor(Date.now() / 1000) + SESSION_SECONDS;
+export function createSession(secret, lifetimeSeconds = SESSION_SECONDS) {
+  const expires = Math.floor(Date.now() / 1000) + lifetimeSeconds;
   return `${expires}.${signature(expires, secret)}`;
 }
 
@@ -62,11 +63,11 @@ export async function readJsonBody(request) {
   return JSON.parse(raw);
 }
 
-export function sessionCookie(value) {
-  return `${ACCESS_COOKIE}=${value}; Path=/; Max-Age=${SESSION_SECONDS}; HttpOnly; Secure; SameSite=Strict`;
+export function sessionCookie(value, maxAge = null) {
+  const persistence = Number.isFinite(maxAge) && maxAge > 0 ? `; Max-Age=${Math.floor(maxAge)}` : "";
+  return `${ACCESS_COOKIE}=${value}; Path=/${persistence}; HttpOnly; Secure; SameSite=Strict`;
 }
 
 export function clearedSessionCookie() {
   return `${ACCESS_COOKIE}=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Strict`;
 }
-

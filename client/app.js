@@ -1,6 +1,10 @@
 const $ = (s, root = document) => root.querySelector(s);
 const $$ = (s, root = document) => [...root.querySelectorAll(s)];
 const DAY = 86400000;
+const STANDALONE_MODE = window.matchMedia('(display-mode: standalone)').matches || Boolean(navigator.standalone);
+const LIGHTWEIGHT_MODE = STANDALONE_MODE || window.matchMedia('(max-width: 760px), (pointer: coarse), (prefers-reduced-motion: reduce)').matches;
+document.body.classList.toggle('app-standalone', STANDALONE_MODE);
+document.body.classList.toggle('performance-mode', LIGHTWEIGHT_MODE);
 const iso = (date = new Date()) => {
   const d = new Date(date); d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
   return d.toISOString().slice(0, 10);
@@ -40,7 +44,7 @@ const seed = {
     { id: 201, name: 'Aarav Mehta', initials: 'AM', date: iso(), start: '16:15', duration: 45, purpose: 'Review project architecture', outcome: 'Leave with a final database and deployment decision.', urgency: 'This week', flexibility: 'Can move ±2 hours', note: 'I have prepared two options and will send them before the call.', status: 'pending', impact: 'This consumes the transition before your workout and leaves only 15 minutes of buffer.', safe: false },
     { id: 202, name: 'Priya Shah', initials: 'PS', date: iso(addDays(1)), start: '13:30', duration: 30, purpose: 'College event coordination', outcome: 'Assign owners and confirm the submission date.', urgency: 'Before Monday', flexibility: 'Any time 1–3 PM', note: 'We should need no more than 30 minutes.', status: 'pending', impact: 'Fits inside published free time and does not displace planned work.', safe: true }
   ],
-  profile: { xp: 340, streak: 5, sessions: 8, accuratePlans: 6, lastProductive: iso(addDays(-1)) },
+  profile: { xp: 340, streak: 5, bestStreak: 5, sessions: 8, accuratePlans: 6, lastProductive: iso(addDays(-1)) },
   share: { token: 'focus-7K3P', oneTime: true, expires: true, approval: true, questions: true, privacy: true },
   taxonomy: DEFAULT_TAXONOMY
 };
@@ -48,7 +52,7 @@ const seed = {
 const STORE = 'life-command-v3';
 const clone = obj => JSON.parse(JSON.stringify(obj));
 let state = (() => { try { return { ...clone(seed), ...JSON.parse(localStorage.getItem(STORE) || '{}') }; } catch { return clone(seed); } })();
-let ui = { view: 'today', space: null, category: null, planningDate: iso(), rescueId: null, timer: null, taskFilter: 'open', plannerSelected: null };
+let ui = { view: 'today', space: null, category: null, planningDate: iso(), rescueId: null, timer: null, taskFilter: 'open', requestFilter: 'pending', plannerSelected: null };
 let timerHandle = null;
 let sync = { ready: false, revision: 0, dirty: false, saving: false, timer: null, user: null };
 let taxonomyDraft = null;
@@ -58,6 +62,14 @@ function normalizeStateShape() {
   state.paper.strokes ||= []; state.paper.shapes ||= []; state.paper.texts ||= []; state.paper.layout ||= {}; state.paper.sequence ||= []; state.paper.imports ||= [];
   state.preferences ||= { reminders: false, reminderLead: 10, notified: {} };
   state.tasks ||= [];
+  state.requests ||= [];
+  state.profile ||= clone(seed.profile);
+  state.profile.xp = Math.max(0, Number(state.profile.xp) || 0);
+  state.profile.streak = Math.max(0, Number(state.profile.streak) || 0);
+  state.profile.bestStreak = Math.max(state.profile.streak, Number(state.profile.bestStreak) || 0);
+  state.profile.sessions = Math.max(0, Number(state.profile.sessions) || 0);
+  state.profile.accuratePlans = Math.max(0, Number(state.profile.accuratePlans) || 0);
+  state.requests.forEach(request => { request.status ||= 'pending'; });
   state.taxonomy = Array.isArray(state.taxonomy) && state.taxonomy.length ? state.taxonomy : clone(DEFAULT_TAXONOMY);
   state.taxonomy = state.taxonomy.map((area,index)=>({ name:String(area.name||`Area ${index+1}`).trim(), color:/^#[0-9a-f]{6}$/i.test(area.color||'')?area.color:DEFAULT_TAXONOMY[index%DEFAULT_TAXONOMY.length].color, categories:[...new Set((area.categories||[]).map(String).map(x=>x.trim()).filter(Boolean))] }));
   state.tasks.forEach(task=>{
@@ -157,7 +169,7 @@ function openSettings(){
   taxonomyDraft=taxonomyDraftFromState();renderTaxonomyEditor();
   $('#settingsSync').textContent=$('#syncStatus').textContent||'Cloud status unavailable';
   $('#settingsUpdated').textContent=state.meta?.updatedAt?new Date(state.meta.updatedAt).toLocaleString():'No changes yet';
-  $('#reminderLead').value=String(state.preferences.reminderLead||10);updateCompletedHistoryControl();openModal('settingsModal');
+  $('#reminderLead').value=String(state.preferences.reminderLead||10);updateCompletedHistoryControl();updateMotivationControl();openModal('settingsModal');
 }
 function saveTaxonomy(){
   const clean=taxonomyDraft.map(area=>({name:area.name.trim(),color:area.color,categories:area.categories.map(c=>c.name.trim()).filter(Boolean)}));
@@ -193,6 +205,16 @@ function clearCompletedHistory(){
   if(ui.timer&&ids.has(ui.timer.taskId))closeTimer();
   state.meta={...(state.meta||{}),completedHistoryClearedAt:new Date().toISOString(),completedHistoryClearedCount:completed.length};
   save();render();updateCompletedHistoryControl();toast('Completed history cleared',`${completed.length} completed task${completed.length===1?' was':'s were'} removed everywhere. Your XP and streak were kept.`);
+}
+function resetMomentum(){
+  state.profile.xp=0;state.profile.sessions=0;state.profile.accuratePlans=0;
+  state.meta={...(state.meta||{}),momentumResetAt:new Date().toISOString()};
+  save();render();updateMotivationControl();toast('Momentum reset','Tasks, productive days and completed work remain safe. Your next milestone starts from zero.');
+}
+function resetRhythm(){
+  state.profile.streak=0;state.profile.lastProductive=null;
+  state.meta={...(state.meta||{}),rhythmResetAt:new Date().toISOString()};
+  save();render();updateMotivationControl();toast('Productive days reset','Your tasks and momentum XP were not changed. You can begin again today.');
 }
 async function importBackupFile(file){
   try{
@@ -250,6 +272,31 @@ function taskMarkButtons(task, paper = false) {
   return `<div class="${paper?'paper-marks':'task-marks'}">${marks.map(([key,icon,label])=>`<button class="${hasMark(task,key)?'active':''}" data-task-mark="${key}" data-task-mark-id="${task.id}" title="${label}" aria-label="${label}" aria-pressed="${hasMark(task,key)}">${icon}</button>`).join('')}</div>`;
 }
 
+const MOMENTUM_MILESTONES = [
+  { xp:0, name:'Fresh start', symbol:'·', meaning:'One clear action is enough to begin.' },
+  { xp:100, name:'Getting moving', symbol:'↗', meaning:'You are turning intentions into visible action.' },
+  { xp:250, name:'Steady builder', symbol:'◇', meaning:'Small follow-through is becoming a reliable pattern.' },
+  { xp:500, name:'Focused finisher', symbol:'✦', meaning:'You finish meaningful work without chasing perfection.' },
+  { xp:1000, name:'Reliable rhythm', symbol:'◈', meaning:'Your system supports you across busy and quiet days.' },
+  { xp:2000, name:'Deep work craft', symbol:'⌁', meaning:'You protect attention and recover deliberately.' }
+];
+function momentumStatus() {
+  const xp = state.profile.xp;
+  const current = [...MOMENTUM_MILESTONES].reverse().find(item => xp >= item.xp) || MOMENTUM_MILESTONES[0];
+  const next = MOMENTUM_MILESTONES.find(item => item.xp > xp) || null;
+  const span = next ? Math.max(1, next.xp - current.xp) : 1;
+  const progress = next ? Math.min(100, Math.round((xp - current.xp) / span * 100)) : 100;
+  return { current, next, progress };
+}
+function updateMotivationControl() {
+  const status = momentumStatus(), days = state.profile.streak;
+  if ($('#momentumBadge')) $('#momentumBadge').textContent = `${status.current.symbol} ${status.current.name}`;
+  if ($('#momentumMeaning')) $('#momentumMeaning').textContent = status.current.meaning;
+  if ($('#momentumXp')) $('#momentumXp').textContent = `${state.profile.xp} XP`;
+  if ($('#rhythmDays')) $('#rhythmDays').textContent = `${days} productive day${days===1?'':'s'}`;
+  if ($('#momentumProgress')) $('#momentumProgress').style.width = `${status.progress}%`;
+  if ($('#momentumNext')) $('#momentumNext').textContent = status.next ? `${status.next.xp-state.profile.xp} XP to “${status.next.name}.” Rest days never remove progress.` : 'Highest milestone reached. Rest days never remove progress.';
+}
 function reward(points, text) {
   state.profile.xp += points; save();
   $('#xpBurstValue').textContent = `+${points} XP`; $('#xpBurstText').textContent = text;
@@ -263,7 +310,8 @@ function openModal(id) { $(`#${id}`).classList.add('open'); $(`#${id}`).setAttri
 function closeModal(id) { $(`#${id}`).classList.remove('open'); $(`#${id}`).setAttribute('aria-hidden', 'true'); }
 function setProductive() {
   if (state.profile.lastProductive === iso()) return;
-  state.profile.streak = state.profile.lastProductive === iso(addDays(-1)) ? state.profile.streak + 1 : 1;
+  state.profile.streak += 1;
+  state.profile.bestStreak = Math.max(state.profile.bestStreak || 0, state.profile.streak);
   state.profile.lastProductive = iso();
 }
 
@@ -305,9 +353,9 @@ function todayView() {
   const nowTask = scheduled.find(t=>t.progress<100) || unscheduled[0];
   const next = scheduled.filter(t=>t.id!==nowTask?.id).slice(0,3);
   const remaining = Math.round(tasks.reduce((n,t)=>n+t.duration*(1-t.progress/100),0));
-  const level = Math.floor(state.profile.xp/400)+3;
+  const momentum = momentumStatus();
   return `${pageHead(new Date().toLocaleDateString('en-US',{weekday:'long',day:'numeric',month:'long'}).toUpperCase(), `Today, clearly.<br><em>Nothing out of sight.</em>`, `<button class="secondary" data-view="all">All open tasks</button><button class="primary" data-open="taskModal">+ Capture</button>`)}
-    <section class="metric-row"><article class="metric"><small>OPEN TODAY</small><strong>${tasks.length}</strong><span>${unscheduled.length} still need a time</span></article><article class="metric"><small>REMAINING LOAD</small><strong>${duration(remaining)}</strong><span>${remaining>300?'Protect your focus blocks':'Achievable with breathing room'}</span></article><article class="metric"><small>STREAK</small><strong>${state.profile.streak} days</strong><span>Honest replanning counts</span></article><article class="metric accent"><small>MOMENTUM</small><strong>${state.profile.xp} XP</strong><span>Level ${level}</span></article></section>
+    <section class="metric-row"><article class="metric"><small>OPEN TODAY</small><strong>${tasks.length}</strong><span>${unscheduled.length} still need a time</span></article><article class="metric"><small>REMAINING LOAD</small><strong>${duration(remaining)}</strong><span>${remaining>300?'Protect your focus blocks':'Achievable with breathing room'}</span></article><article class="metric"><small>PRODUCTIVE RHYTHM</small><strong>${state.profile.streak} days</strong><span>Rest never resets this</span></article><article class="metric accent"><small>MOMENTUM</small><strong>${state.profile.xp} XP</strong><span>${momentum.current.symbol} ${momentum.current.name}</span></article></section>
     <div class="today-flow">
       ${nowTask ? `<article class="now-card"><div><p class="eyebrow">NOW · RECOMMENDED NEXT ACTION</p><h2>${esc(nowTask.title)}</h2><p>${duration(Math.round(nowTask.duration*(1-nowTask.progress/100)))} remaining · ${nowTask.energy} energy · ${nowTask.progress}% complete</p><p class="next-action">Next: ${esc(nowTask.next||'Define the first physical action')}</p></div><div class="now-actions"><button class="defer" data-rescue-open="${nowTask.id}">Not now</button><button class="start-now" data-start-now="${nowTask.id}">▶ Start focus</button></div></article>` : `<div class="empty"><b>Nothing is demanding your attention.</b>Enjoy the open space or capture what matters.</div>`}
       <div class="today-columns"><section class="attention-section"><div class="section-title"><div><h2>Next</h2><p>The next visible commitments, in order.</p></div><button class="ghost-btn" data-view="planner">Timeline →</button></div>${next.length?next.map(t=>compactTask(t)).join(''):'<div class="empty"><b>No next commitment.</b>Your schedule has room.</div>'}<div class="mini-timeline">${[8,11,14,17,20,22].map(h=>`<div class="mini-hour"><span>${h>12?h-12:h}${h>=12?'p':'a'}</span><i class="${scheduled.some(t=>mins(t.start)>=h*60&&mins(t.start)<(h+3)*60)?'busy':'open'}"></i></div>`).join('')}</div></section>
@@ -424,11 +472,18 @@ function paperView() {
 }
 
 function requestCard(r) {
-  return `<article class="request-card ${r.status !== 'pending' ? 'resolved' : ''}" data-request="${r.id}"><div class="request-head"><div class="request-person"><span class="person-avatar">${r.initials}</span><div><h3>${esc(r.name)}</h3><p>${dateLabel(r.date)} · ${clock(mins(r.start))} · ${duration(r.duration)}</p></div></div><span class="pending-pill">${r.status.toUpperCase()}</span></div><div class="request-purpose">${esc(r.purpose)}</div><p class="request-note">${esc(r.note)}</p><div class="request-facts"><div><small>EXPECTED RESULT</small><b>${esc(r.outcome)}</b></div><div><small>URGENCY</small><b>${esc(r.urgency)}</b></div><div><small>FLEXIBILITY</small><b>${esc(r.flexibility)}</b></div><div><small>TIME ASKED</small><b>${duration(r.duration)}</b></div></div><div class="impact-box ${r.safe ? 'safe' : ''}"><b>${r.safe ? '✓ Fits your plan: ' : '⚠ Scheduling impact: '}</b>${esc(r.impact)}</div><div class="request-actions"><button class="accept" data-request-action="accept">Approve + create plan</button><button data-request-action="shorten">Offer 30 minutes</button><button data-request-action="reject">Decline</button></div></article>`;
+  const pending = r.status === 'pending';
+  const actions = pending
+    ? `<button class="accept" data-request-action="accept">Approve + create plan</button><button data-request-action="shorten">Offer 30 minutes</button><button data-request-action="reject">Decline</button><button class="request-delete" data-request-action="delete">Delete</button>`
+    : `<span class="resolved-note">Saved in history${r.resolvedAt?` · ${new Date(r.resolvedAt).toLocaleDateString()}`:''}</span><button class="request-delete" data-request-action="delete">Delete from history</button>`;
+  return `<article class="request-card ${pending ? '' : 'resolved'}" data-request="${r.id}"><div class="request-head"><div class="request-person"><span class="person-avatar">${esc(r.initials||String(r.name||'?').slice(0,2).toUpperCase())}</span><div><h3>${esc(r.name)}</h3><p>${dateLabel(r.date)} · ${clock(mins(r.start))} · ${duration(r.duration)}</p></div></div><span class="pending-pill">${esc(r.status.toUpperCase())}</span></div><div class="request-purpose">${esc(r.purpose)}</div><p class="request-note">${esc(r.note)}</p><div class="request-facts"><div><small>EXPECTED RESULT</small><b>${esc(r.outcome)}</b></div><div><small>URGENCY</small><b>${esc(r.urgency)}</b></div><div><small>FLEXIBILITY</small><b>${esc(r.flexibility)}</b></div><div><small>TIME ASKED</small><b>${duration(r.duration)}</b></div></div><div class="impact-box ${r.safe ? 'safe' : ''}"><b>${r.safe ? '✓ Fits your plan: ' : '⚠ Scheduling impact: '}</b>${esc(r.impact)}</div><div class="request-actions">${actions}</div></article>`;
 }
 function requestsView() {
-  const pending = state.requests.filter(r => r.status === 'pending');
-  return `${pageHead('CONTROL WHO GETS YOUR TIME', `Requests wait.<br><em>You choose the tradeoff.</em>`, `<button class="secondary" data-view="share">Manage share link</button>`)}<section class="section-card"><div class="section-title"><div><h2>${pending.length} pending request${pending.length===1?'':'s'}</h2><p>Purpose, outcome and impact are visible before anything reaches your calendar.</p></div></div><div class="request-list">${state.requests.map(requestCard).join('')}</div></section>`;
+  const pending = state.requests.filter(r => r.status === 'pending'), history = state.requests.filter(r => r.status !== 'pending');
+  const visible = ui.requestFilter === 'history' ? history : ui.requestFilter === 'all' ? state.requests : pending;
+  const heading = ui.requestFilter === 'pending' ? `${pending.length} pending request${pending.length===1?'':'s'}` : ui.requestFilter === 'history' ? `${history.length} resolved request${history.length===1?'':'s'}` : `${state.requests.length} total request${state.requests.length===1?'':'s'}`;
+  const empty = ui.requestFilter === 'pending' ? 'No request is waiting for you.' : 'No resolved request is stored.';
+  return `${pageHead('CONTROL WHO GETS YOUR TIME', `Requests wait.<br><em>You choose the tradeoff.</em>`, `<button class="secondary" data-view="share">Manage share link</button>`)}<section class="section-card"><div class="request-toolbar"><div><h2>${heading}</h2><p>History is shown only when you choose it. Accepted tasks remain in your plan even if their request record is deleted.</p></div><div class="request-filter-bar"><button class="filter-chip ${ui.requestFilter==='pending'?'active':''}" data-request-filter="pending">Pending <b>${pending.length}</b></button><button class="filter-chip ${ui.requestFilter==='history'?'active':''}" data-request-filter="history">History <b>${history.length}</b></button><button class="filter-chip ${ui.requestFilter==='all'?'active':''}" data-request-filter="all">All</button>${ui.requestFilter==='history'&&history.length?'<button class="clear-request-history" data-clear-request-history>Clear resolved history</button>':''}</div></div><div class="request-list">${visible.length?visible.map(requestCard).join(''):`<div class="empty"><b>${empty}</b>${ui.requestFilter==='pending'?'Your time remains protected.':'Approved and declined requests will appear here.'}</div>`}</div></section>`;
 }
 
 function shareView() {
@@ -772,11 +827,15 @@ document.addEventListener('click', event => {
   const filter = event.target.closest('[data-filter]'); if (filter) { ui.space = filter.dataset.filter === 'all' ? null : filter.dataset.filter; ui.category = null; render(); return; }
   const space = event.target.closest('[data-space]'); if (space) { ui.view='inbox'; ui.space=space.dataset.space; ui.category=null; render(); return; }
   const category = event.target.closest('[data-category]'); if (category) { ui.view='inbox'; ui.category=category.dataset.category; ui.space=category.dataset.categoryArea||null; render(); return; }
+  const requestFilter = event.target.closest('[data-request-filter]'); if(requestFilter){ui.requestFilter=requestFilter.dataset.requestFilter;render();return;}
+  if(event.target.closest('[data-clear-request-history]')){const count=state.requests.filter(r=>r.status!=='pending').length;state.requests=state.requests.filter(r=>r.status==='pending');save();render();toast('Request history cleared',`${count} resolved request${count===1?' was':'s were'} removed. Tasks created from approvals remain in your plan.`);return;}
   const reqAction = event.target.closest('[data-request-action]'); if (reqAction) {
     const card = reqAction.closest('[data-request]'), r = state.requests.find(x=>x.id===Number(card.dataset.request));
-    if (reqAction.dataset.requestAction === 'accept') { r.status='approved'; state.tasks.push({ id:uid(), title:r.purpose, area:'Career', category:'Meetings', duration:r.duration, energy:'medium', date:r.date, start:r.start, plan:'fixed', progress:0, next:r.outcome, timer:false, publish:true, publicTitle:'Scheduled conversation', calendar:true, postponed:0 }); state.tasks.push({ id:uid(), title:`Prepare for: ${r.purpose}`, area:'Career', category:'Meetings', duration:20, energy:'low', date:r.date, start:null, plan:'today', progress:0, next:'Review the request context and expected result', timer:true, publish:false, calendar:false, postponed:0 }); reward(15,'A clear commitment was created'); toast('Request approved','Event and preparation task were added.'); }
+    if(!r)return;
+    if (reqAction.dataset.requestAction === 'accept') { r.status='approved';r.resolvedAt=new Date().toISOString(); state.tasks.push({ id:uid(), title:r.purpose, area:'Career', category:'Meetings', duration:r.duration, energy:'medium', date:r.date, start:r.start, plan:'fixed', progress:0, next:r.outcome, timer:false, publish:true, publicTitle:'Scheduled conversation', calendar:true, postponed:0 }); state.tasks.push({ id:uid(), title:`Prepare for: ${r.purpose}`, area:'Career', category:'Meetings', duration:20, energy:'low', date:r.date, start:null, plan:'today', progress:0, next:'Review the request context and expected result', timer:true, publish:false, calendar:false, postponed:0 }); reward(15,'A clear commitment was created'); toast('Request approved','Event and preparation task were added. The request moved to History.'); }
     if (reqAction.dataset.requestAction === 'shorten') { r.duration=30; r.impact='Reduced to 30 minutes; your workout keeps a 30-minute buffer.'; r.safe=true; toast('Shorter option prepared','The request now fits your day better.'); }
-    if (reqAction.dataset.requestAction === 'reject') { r.status='declined'; reward(10,'Protecting priorities is productive'); toast('Request declined','Your planned work remains protected.'); }
+    if (reqAction.dataset.requestAction === 'reject') { r.status='declined';r.resolvedAt=new Date().toISOString(); reward(10,'Protecting priorities is productive'); toast('Request declined','Your planned work remains protected. The request moved to History.'); }
+    if (reqAction.dataset.requestAction === 'delete') { state.requests=state.requests.filter(item=>item.id!==r.id);toast(r.status==='pending'?'Pending request deleted':'Request removed from history',r.status==='pending'?'It will no longer appear in your approval inbox.':'Any tasks created from it remain in your plan.'); }
     save(); render(); return;
   }
   const setting = event.target.closest('[data-setting]'); if (setting) { state.share[setting.dataset.setting]=!state.share[setting.dataset.setting]; save(); render(); return; }
@@ -822,6 +881,8 @@ $('#scanMode').addEventListener('change',event=>{$('#scanQualityTip').textConten
 $('#scanLanguage').addEventListener('change',()=>{if(scanRuntime.file)recognizeScan();});
 $('#exportBackup').addEventListener('click',exportBackup);
 $('#clearCompletedHistory').addEventListener('click',clearCompletedHistory);
+$('#resetMomentum').addEventListener('click',resetMomentum);
+$('#resetRhythm').addEventListener('click',resetRhythm);
 $('#importBackup').addEventListener('change',event=>{const file=event.target.files?.[0];if(file)importBackupFile(file);event.target.value='';});
 $('#installApp').addEventListener('click',installWebsite);
 $('#installNudgeAction').addEventListener('click',installWebsite);
@@ -848,7 +909,7 @@ $('#taskDelete').addEventListener('click',()=>{const id=ui.editTaskId;if(!id)ret
 $('#freeForm').addEventListener('submit',event=>{event.preventDefault();state.availability.push({id:uid(),date:$('#freeDate').value,start:$('#freeStart').value,end:$('#freeEnd').value,label:$('#freeLabel').value,max:Number($('#freeMax').value)});save();closeModal('freeModal');toast('Free time published','Visitors can request this window, subject to approval.');render();});
 $('#timerToggle').addEventListener('click',()=>{if(!ui.timer)return;ui.timer.running=!ui.timer.running;$('#timerToggle').textContent=ui.timer.running?'Ⅱ':'▶';});
 $('#timerStop').addEventListener('click',finishTimer); $('#timerClose').addEventListener('click',closeTimer);
-$('#resetBtn').addEventListener('click',()=>{state=clone(seed);state.tasks.forEach(task=>{task.paperMarks={circle:false,tick:false,box:false,star:false};task.repeat='none';});state.paper={title:'Everything on my mind',strokes:[],shapes:[],texts:[{id:9001,x:7.5,y:11.5,text:'Do what matters. Leave room to breathe.',type:'note'}],layout:{},sequence:[],imports:[]};state.preferences={reminders:false,reminderLead:10,notified:{}};save();ui={view:'today',space:null,category:null,planningDate:iso(),rescueId:null,timer:null,taskFilter:'open',plannerSelected:null};closeTimer();render();updateReminderUI();toast('Demo restored','All sample data is back.');});
+$('#resetBtn').addEventListener('click',()=>{state=clone(seed);state.tasks.forEach(task=>{task.paperMarks={circle:false,tick:false,box:false,star:false};task.repeat='none';});state.paper={title:'Everything on my mind',strokes:[],shapes:[],texts:[{id:9001,x:7.5,y:11.5,text:'Do what matters. Leave room to breathe.',type:'note'}],layout:{},sequence:[],imports:[]};state.preferences={reminders:false,reminderLead:10,notified:{}};save();ui={view:'today',space:null,category:null,planningDate:iso(),rescueId:null,timer:null,taskFilter:'open',requestFilter:'pending',plannerSelected:null};closeTimer();render();updateReminderUI();toast('Demo restored','All sample data is back.');});
 $$('.modal-layer').forEach(layer=>layer.addEventListener('click',e=>{if(e.target===layer)closeModal(layer.id);}));
 document.addEventListener('keydown',e=>{const typing=['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName);if((e.key==='c'||e.key==='C')&&!typing)openTaskEditor();if(e.key==='/'&&!typing){e.preventDefault();openSearch();}if(e.key==='Escape')$$('.modal-layer.open').forEach(m=>closeModal(m.id));});
 

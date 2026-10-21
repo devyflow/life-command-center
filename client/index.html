@@ -2,18 +2,19 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <meta name="theme-color" content="#111514">
   <meta name="description" content="Life Command Center — plan your time, protect your attention and finish what matters.">
   <meta name="application-name" content="Life Command Center">
   <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>Life Command Center</title>
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="apple-touch-icon" href="/icon-192.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&family=Newsreader:ital,opsz,wght@1,6..72,500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=install-v1">
+  <link rel="stylesheet" href="styles.css?v=experience-v1">
 </head>
 <body>
   <div class="grain" aria-hidden="true"></div>
@@ -118,6 +119,12 @@
           <div class="settings-actions"><button class="primary" type="button" id="exportBackup">Download backup</button><label class="secondary settings-file">Restore backup<input id="importBackup" type="file" accept="application/json,.json" hidden></label><button class="secondary" type="button" id="installApp" hidden>Install website app</button></div>
           <div class="settings-status"><span><b id="settingsSync">Cloud synced</b><small>Shared across signed-in devices</small></span><span><b id="settingsUpdated">No changes yet</b><small>Latest saved change</small></span></div>
           <label class="settings-select">Reminder lead time<select id="reminderLead"><option value="5">5 minutes</option><option value="10">10 minutes</option><option value="15">15 minutes</option><option value="30">30 minutes</option><option value="60">1 hour</option></select></label>
+          <div class="motivation-panel">
+            <div class="motivation-head"><span class="motivation-symbol">✦</span><div><b id="momentumBadge">Fresh start</b><small id="momentumMeaning">One clear action is enough to begin.</small></div></div>
+            <div class="motivation-stats"><span><b id="momentumXp">0 XP</b><small>Momentum</small></span><span><b id="rhythmDays">0 days</b><small>Productive rhythm</small></span></div>
+            <div class="momentum-progress"><i id="momentumProgress"></i></div><p id="momentumNext">Your next milestone is ready when you are. Rest days never remove progress.</p>
+            <div class="settings-actions"><button class="secondary" type="button" id="resetMomentum">Reset momentum</button><button class="secondary" type="button" id="resetRhythm">Reset productive days</button></div>
+          </div>
           <div class="history-clear-panel"><div><b>Completed task history</b><small id="completedHistoryCount">No completed tasks to clear.</small><p>Completed tasks stay visible until you clear them manually. Clearing removes them from Tasks, Search, Paper, Planner and cloud storage. Your XP and streak remain.</p></div><button class="danger-button" type="button" id="clearCompletedHistory">Clear history</button></div>
         </section>
         <section class="settings-panel taxonomy-panel">
@@ -178,7 +185,7 @@
   </aside>
   <div class="toast" id="toast"><span>✓</span><div><b id="toastTitle">Saved</b><small id="toastText">Your change is ready.</small></div></div>
   <div class="xp-burst" id="xpBurst"><span>✦</span><b id="xpBurstValue">+10 XP</b><small id="xpBurstText">Momentum earned</small></div>
-  <script src="app.js?v=install-v1"></script>
-  <script type="module" src="scene.js?v=cloud-foundation-v1"></script>
+  <script src="app.js?v=experience-v1"></script>
+  <script type="module" src="scene.js?v=experience-v1"></script>
 </body>
 </html>
