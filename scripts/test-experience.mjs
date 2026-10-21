@@ -108,10 +108,14 @@ assert.equal(read(`paperPlan(state.tasks).positions.get(1).mode`),'float','Indiv
 run(`state.boardNotes=[{id:1,text:'A visible principle',x:-5,y:0,w:20,h:30,showGlance:true}];state.library=[{id:2,title:'Diagram tool',context:'presentations',tags:['design'],status:'ready'}];normalizeStateShape();`);
 assert.deepEqual(read(`({x:state.boardNotes[0].x,y:state.boardNotes[0].y,w:state.boardNotes[0].w,h:state.boardNotes[0].h})`),{x:12,y:35,w:170,h:145},'Board notes receive safe sizes and positions');
 assert.match(run('boardView()'),/data-board-note-float/);
+run(`ui.boardMenuId=1`);assert.match(run('boardView()'),/menu-open/,'Selected Bulletin controls stay open');
 run(`ui.libraryFilter='active';ui.libraryQuery='presentations'`);
 assert.equal(read(`state.library.filter(libraryMatches).length`),1,'Library search finds an item by its use context');
+run(`state.tasks=[{id:7,title:'Prepare design presentation',next:'Build a visual diagram',area:'Career',category:'Projects',progress:0}];state.library=[{id:8,title:'Visual presentation design toolkit',context:'presentations and teaching',tags:['design','diagram'],status:'ready',minutes:30}];ui.libraryQuery='';`);
+assert.equal(read(`knowledgeSuggestions(state.tasks[0],1)[0].item.id`),8,'Knowledge suggestions connect a useful item to a relevant task');
+assert.match(run('libraryView()'),/QUIET CONTEXTUAL SUGGESTIONS/);
 run(`renderSearchResults('diagram')`);
-assert.match(elements.get('#searchResults').textContent,/data-search-library="2"/,'Global search includes useful-library items');
+assert.match(elements.get('#searchResults').textContent,/data-search-library="8"/,'Global search includes useful-library items');
 const manifest=JSON.parse(await readFile(new URL('../client/manifest.webmanifest',import.meta.url),'utf8'));
 assert.equal(manifest.share_target.action,'/?share-target=1','Installed app can receive shared links');
 const serviceWorker=await readFile(new URL('../client/sw.js',import.meta.url),'utf8');

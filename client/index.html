@@ -14,7 +14,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&family=Newsreader:ital,opsz,wght@1,6..72,500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=workspace-v3">
+  <link rel="stylesheet" href="styles.css?v=workspace-v4">
 </head>
 <body>
   <div class="grain" aria-hidden="true"></div>
@@ -91,6 +91,7 @@
           <label>First tiny step<input id="taskNext" type="text" placeholder="Open notes and outline"></label>
         </div>
         <div class="capture-marks"><span>Paper meaning</span><label><input id="taskCircle" type="checkbox"> ◯ Important</label><label><input id="taskReady" type="checkbox"> ✓ Ready to act</label><label><input id="taskBox" type="checkbox"> □ Protect this time</label><label><input id="taskStar" type="checkbox"> ★ Today focus</label></div>
+        <section class="task-knowledge" id="taskKnowledge" hidden><div><span class="eyebrow">FROM YOUR USEFUL LIBRARY</span><b>Relevant material for this task</b></div><div id="taskKnowledgeItems"></div></section>
         <div class="choice-row"><label><input id="taskTimer" type="checkbox" checked> Add focus timer</label><label><input id="taskPublish" type="checkbox"> Show on shared calendar</label><label><input id="taskCalendar" type="checkbox"> Add to calendar when scheduled</label></div>
         <footer class="modal-actions"><span>Nothing has to be perfect yet.</span><div><button class="danger-button" type="button" id="taskDelete" hidden>Delete task</button><button class="primary" type="submit" id="taskSubmit">Capture task →</button></div></footer>
       </form>
@@ -225,7 +226,7 @@
   <aside class="glance-popup" id="glancePopup" aria-live="polite" aria-hidden="true"><button class="glance-popup-close" data-glance-popup-close aria-label="Close">×</button><small id="glancePopupType">FROM YOUR BOARD</small><b id="glancePopupText"></b><button class="glance-popup-open" data-view="board">Open board →</button></aside>
   <div class="toast" id="toast"><span>✓</span><div><b id="toastTitle">Saved</b><small id="toastText">Your change is ready.</small></div></div>
   <div class="xp-burst" id="xpBurst"><span>✦</span><b id="xpBurstValue">+10 XP</b><small id="xpBurstText">Momentum earned</small></div>
-  <script src="app.js?v=workspace-v3"></script>
-  <script type="module" src="scene.js?v=workspace-v3"></script>
+  <script src="app.js?v=workspace-v4"></script>
+  <script type="module" src="scene.js?v=workspace-v4"></script>
 </body>
 </html>
