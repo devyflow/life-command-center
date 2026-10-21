@@ -5,7 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#111514">
   <meta name="description" content="Life Command Center — plan your time, protect your attention and finish what matters.">
+  <meta name="application-name" content="Life Command Center">
+  <meta name="apple-mobile-web-app-capable" content="yes">
   <title>Life Command Center</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/icon-192.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&family=Newsreader:ital,opsz,wght@1,6..72,500&display=swap" rel="stylesheet">
@@ -28,6 +32,7 @@
       <p class="eyebrow">TOOLS</p>
       <button class="nav-item" data-view="share"><span>◎</span><b>Share time</b></button>
       <button class="nav-item" data-view="insights"><span>↗</span><b>Insights</b></button>
+      <button class="nav-item" id="settingsBtn"><span>⚙</span><b>Data & organization</b></button>
       <button class="nav-item" id="reminderBtn"><span>◷</span><b>Browser reminders</b><i id="reminderState">Off</i></button>
       <button class="nav-item" id="lockWorkspace"><span>⌾</span><b>Lock workspace</b></button>
     </nav>
@@ -103,6 +108,27 @@
 
   <div class="modal-layer" id="shareModal" aria-hidden="true"><div class="modal share-modal" role="dialog" aria-modal="true"><header class="modal-head"><div><p class="eyebrow">VISITOR PREVIEW</p><h2>This is what they will see.</h2></div><button data-close="shareModal">×</button></header><div id="visitorPreview"></div></div></div>
 
+  <div class="modal-layer" id="settingsModal" aria-hidden="true">
+    <div class="modal settings-modal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+      <header class="modal-head"><div><p class="eyebrow">YOUR SYSTEM</p><h2 id="settingsTitle">Data and organization.</h2></div><button data-close="settingsModal">×</button></header>
+      <div class="settings-grid">
+        <section class="settings-panel">
+          <p class="eyebrow">BACKUP & DEVICE</p><h3>Keep your command center portable.</h3>
+          <p>Your cloud workspace syncs automatically. A JSON backup gives you a separate copy you can restore later.</p>
+          <div class="settings-actions"><button class="primary" type="button" id="exportBackup">Download backup</button><label class="secondary settings-file">Restore backup<input id="importBackup" type="file" accept="application/json,.json" hidden></label><button class="secondary" type="button" id="installApp" hidden>Install website app</button></div>
+          <div class="settings-status"><span><b id="settingsSync">Cloud synced</b><small>Shared across signed-in devices</small></span><span><b id="settingsUpdated">No changes yet</b><small>Latest saved change</small></span></div>
+          <label class="settings-select">Reminder lead time<select id="reminderLead"><option value="5">5 minutes</option><option value="10">10 minutes</option><option value="15">15 minutes</option><option value="30">30 minutes</option><option value="60">1 hour</option></select></label>
+        </section>
+        <section class="settings-panel taxonomy-panel">
+          <div class="settings-panel-head"><div><p class="eyebrow">MY LIFE</p><h3>Areas and categories</h3></div><button class="secondary" type="button" id="addArea">+ Area</button></div>
+          <p>Rename your structure here. Existing tasks follow their renamed area or category automatically.</p>
+          <div id="taxonomyEditor" class="taxonomy-editor"></div>
+          <button class="primary taxonomy-save" type="button" id="saveTaxonomy">Save organization →</button>
+        </section>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-layer" id="scanModal" aria-hidden="true">
     <div class="modal scan-modal" role="dialog" aria-modal="true" aria-labelledby="scanTitle">
       <header class="modal-head"><div><p class="eyebrow">SCAN INTO PAPER</p><h2 id="scanTitle">Turn a page into editable tasks.</h2></div><button data-close="scanModal">×</button></header>
@@ -142,7 +168,7 @@
   <div class="timer-dock" id="timerDock"><button class="timer-ring" id="timerToggle">▶</button><div><small>FOCUSING ON</small><strong id="timerTask">Task</strong></div><time id="timerTime">25:00</time><button class="timer-stop" id="timerStop">Finish session</button><button class="bare" id="timerClose">×</button></div>
   <div class="toast" id="toast"><span>✓</span><div><b id="toastTitle">Saved</b><small id="toastText">Your change is ready.</small></div></div>
   <div class="xp-burst" id="xpBurst"><span>✦</span><b id="xpBurstValue">+10 XP</b><small id="xpBurstText">Momentum earned</small></div>
-  <script src="app.js?v=paper-scan-v1"></script>
+  <script src="app.js?v=daily-driver-v1"></script>
   <script type="module" src="scene.js?v=cloud-foundation-v1"></script>
 </body>
 </html>

@@ -13,7 +13,12 @@ const clock = total => { const h = Math.floor(total / 60), m = total % 60; retur
 const duration = n => n >= 60 ? `${Math.floor(n / 60)}h${n % 60 ? ` ${n % 60}m` : ''}` : `${n}m`;
 const dateLabel = value => new Date(`${value}T12:00:00`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 const dayLong = value => new Date(`${value}T12:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
-const color = area => area === 'Career' ? '#ff7962' : area === 'Personal' ? '#75a6ff' : '#9cbe52';
+const DEFAULT_TAXONOMY = [
+  { name:'Career', color:'#ff7962', categories:['College','DSA','Meetings','Projects'] },
+  { name:'Personal', color:'#75a6ff', categories:['Health','Home','Relationships','Paper capture'] },
+  { name:'Growth', color:'#9cbe52', categories:['Learning','Reading','Skills'] }
+];
+const color = area => state?.taxonomy?.find(item=>item.name===area)?.color || DEFAULT_TAXONOMY.find(item=>item.name===area)?.color || '#9cbe52';
 
 const seed = {
   tasks: [
@@ -36,20 +41,30 @@ const seed = {
     { id: 202, name: 'Priya Shah', initials: 'PS', date: iso(addDays(1)), start: '13:30', duration: 30, purpose: 'College event coordination', outcome: 'Assign owners and confirm the submission date.', urgency: 'Before Monday', flexibility: 'Any time 1–3 PM', note: 'We should need no more than 30 minutes.', status: 'pending', impact: 'Fits inside published free time and does not displace planned work.', safe: true }
   ],
   profile: { xp: 340, streak: 5, sessions: 8, accuratePlans: 6, lastProductive: iso(addDays(-1)) },
-  share: { token: 'focus-7K3P', oneTime: true, expires: true, approval: true, questions: true, privacy: true }
+  share: { token: 'focus-7K3P', oneTime: true, expires: true, approval: true, questions: true, privacy: true },
+  taxonomy: DEFAULT_TAXONOMY
 };
 
 const STORE = 'life-command-v3';
 const clone = obj => JSON.parse(JSON.stringify(obj));
 let state = (() => { try { return { ...clone(seed), ...JSON.parse(localStorage.getItem(STORE) || '{}') }; } catch { return clone(seed); } })();
-let ui = { view: 'today', space: null, category: null, planningDate: iso(), rescueId: null, timer: null, taskFilter: 'open' };
+let ui = { view: 'today', space: null, category: null, planningDate: iso(), rescueId: null, timer: null, taskFilter: 'open', plannerSelected: null };
 let timerHandle = null;
 let sync = { ready: false, revision: 0, dirty: false, saving: false, timer: null, user: null };
+let taxonomyDraft = null;
+let installPrompt = null;
 function normalizeStateShape() {
   state.paper ||= { title: 'Everything on my mind', strokes: [], shapes: [], texts: [{ id: 9001, x: 7.5, y: 11.5, text: 'Do what matters. Leave room to breathe.', type: 'note' }], layout: {}, sequence: [] };
   state.paper.strokes ||= []; state.paper.shapes ||= []; state.paper.texts ||= []; state.paper.layout ||= {}; state.paper.sequence ||= []; state.paper.imports ||= [];
   state.preferences ||= { reminders: false, reminderLead: 10, notified: {} };
   state.tasks ||= [];
+  state.taxonomy = Array.isArray(state.taxonomy) && state.taxonomy.length ? state.taxonomy : clone(DEFAULT_TAXONOMY);
+  state.taxonomy = state.taxonomy.map((area,index)=>({ name:String(area.name||`Area ${index+1}`).trim(), color:/^#[0-9a-f]{6}$/i.test(area.color||'')?area.color:DEFAULT_TAXONOMY[index%DEFAULT_TAXONOMY.length].color, categories:[...new Set((area.categories||[]).map(String).map(x=>x.trim()).filter(Boolean))] }));
+  state.tasks.forEach(task=>{
+    let area=state.taxonomy.find(item=>item.name===task.area);
+    if(!area){area={name:task.area||'Unsorted',color:'#9cbe52',categories:[]};state.taxonomy.push(area);}
+    if(task.category&&!area.categories.includes(task.category))area.categories.push(task.category);
+  });
   state.tasks.forEach(task => { task.paperMarks ||= { circle: task.paperEmphasis === 'circle', tick: false, box: task.paperEmphasis === 'box', star: task.paperEmphasis === 'star' }; task.repeat ||= 'none'; });
 }
 normalizeStateShape();
@@ -122,6 +137,55 @@ function scanReminders() {
       state.preferences.notified[key]=new Date().toISOString(); save();
     }
   });
+}
+
+function renderLifeTree() {
+  const root=$('.space-tree');if(!root)return;
+  root.innerHTML=`<p class="eyebrow">MY LIFE</p>${state.taxonomy.map(area=>`<button class="space-row" data-space="${esc(area.name)}"><span class="space-dot" style="background:${area.color}"></span><b>${esc(area.name)}</b><i>${state.tasks.filter(t=>t.area===area.name&&t.progress<100).length}</i></button><div class="tree-children">${area.categories.map(category=>`<button class="${ui.category===category&&ui.space===area.name?'active':''}" data-category="${esc(category)}" data-category-area="${esc(area.name)}">${esc(category)}</button>`).join('')}</div>`).join('')}`;
+}
+function populateAreaSelect(select, selected='') {
+  if(!select)return;const choice=selected||state.taxonomy[0]?.name||'Unsorted';
+  select.innerHTML=state.taxonomy.map(area=>`<option value="${esc(area.name)}" ${area.name===choice?'selected':''}>${esc(area.name)}</option>`).join('');
+  if(!state.taxonomy.some(area=>area.name===choice))select.insertAdjacentHTML('afterbegin',`<option selected>${esc(choice)}</option>`);
+}
+function taxonomyDraftFromState(){return state.taxonomy.map(area=>({name:area.name,color:area.color,originalName:area.name,categories:area.categories.map(name=>({name,originalName:name}))}));}
+function renderTaxonomyEditor(){
+  const root=$('#taxonomyEditor');if(!root||!taxonomyDraft)return;
+  root.innerHTML=taxonomyDraft.map((area,areaIndex)=>`<article class="taxonomy-area"><div class="taxonomy-area-head"><input type="color" value="${area.color}" data-tax-area-color="${areaIndex}" aria-label="${esc(area.name)} color"><input type="text" value="${esc(area.name)}" data-tax-area-name="${areaIndex}" maxlength="32" aria-label="Area name"><button class="taxonomy-remove" type="button" data-tax-remove-area="${areaIndex}" title="Remove area">×</button></div><div class="taxonomy-categories">${area.categories.map((category,categoryIndex)=>`<label class="taxonomy-category"><input type="text" value="${esc(category.name)}" data-tax-category-name="${areaIndex}:${categoryIndex}" maxlength="40" aria-label="Category name"><button class="taxonomy-remove" type="button" data-tax-remove-category="${areaIndex}:${categoryIndex}" title="Remove category">×</button></label>`).join('')}</div><button class="taxonomy-add" type="button" data-tax-add-category="${areaIndex}">+ Add category</button></article>`).join('');
+}
+function openSettings(){
+  taxonomyDraft=taxonomyDraftFromState();renderTaxonomyEditor();
+  $('#settingsSync').textContent=$('#syncStatus').textContent||'Cloud status unavailable';
+  $('#settingsUpdated').textContent=state.meta?.updatedAt?new Date(state.meta.updatedAt).toLocaleString():'No changes yet';
+  $('#reminderLead').value=String(state.preferences.reminderLead||10);openModal('settingsModal');
+}
+function saveTaxonomy(){
+  const clean=taxonomyDraft.map(area=>({name:area.name.trim(),color:area.color,categories:area.categories.map(c=>c.name.trim()).filter(Boolean)}));
+  if(clean.some(area=>!area.name||!area.categories.length)){toast('Each area needs a name and category','Add at least one category before saving.');return;}
+  if(new Set(clean.map(area=>area.name.toLowerCase())).size!==clean.length){toast('Area names must be unique');return;}
+  for(const area of taxonomyDraft){
+    if(!area.originalName)continue;
+    state.tasks.filter(task=>task.area===area.originalName).forEach(task=>{
+      task.area=area.name.trim();
+      const category=area.categories.find(item=>item.originalName===task.category);if(category)task.category=category.name.trim();
+    });
+  }
+  state.taxonomy=clean;normalizeStateShape();save();populateAreaSelect($('#taskArea'));populateAreaSelect($('#scanArea'));render();closeModal('settingsModal');toast('Organization saved','Tasks, Paper and navigation now use the same structure.');
+}
+function exportBackup(){
+  const payload={format:'life-command-center',version:1,exportedAt:new Date().toISOString(),state};
+  const href=URL.createObjectURL(new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}));const link=document.createElement('a');link.href=href;link.download=`life-command-backup-${iso()}.json`;link.click();setTimeout(()=>URL.revokeObjectURL(href),1000);toast('Backup downloaded','Keep it somewhere private.');
+}
+async function importBackupFile(file){
+  try{
+    const parsed=JSON.parse(await file.text()),incoming=parsed?.format==='life-command-center'?parsed.state:parsed;
+    if(!incoming||!Array.isArray(incoming.tasks)||typeof incoming!=='object')throw new Error('This is not a Life Command Center backup.');
+    state=clone(incoming);normalizeStateShape();saveLocal();sync.dirty=true;await pushCloudState(true);populateAreaSelect($('#taskArea'));populateAreaSelect($('#scanArea'));render();updateReminderUI();closeModal('settingsModal');toast('Backup restored',`${state.tasks.length} tasks are available on this device and cloud.`);
+  }catch(error){toast('Backup could not be restored',error.message||'Choose a valid JSON backup.');}
+}
+async function installWebsite(){
+  if(!installPrompt){toast('Install from your browser menu','Choose “Install app” or “Add to Home Screen”.');return;}
+  installPrompt.prompt();await installPrompt.userChoice;installPrompt=null;document.body.classList.remove('install-ready');
 }
 
 const hasMark = (task, mark) => Boolean(task.paperMarks?.[mark]);
@@ -211,12 +275,13 @@ function todayView() {
     </div>`;
 }
 
-function hourRows() { return Array.from({ length: 17 }, (_, i) => { const h = i + 6; return `<div class="hour-row"><time>${clock(h * 60)}</time><div class="hour-line"></div></div>`; }).join(''); }
+function hourRows() { return Array.from({ length: 17 }, (_, i) => { const h = i + 6,time=`${String(h).padStart(2,'0')}:00`; return `<div class="hour-row"><time>${clock(h * 60)}</time><div class="hour-line" data-planner-time="${time}" title="Drop a task at ${clock(h*60)}"></div></div>`; }).join(''); }
 function positionedBlock(item, type = 'task') {
   const start = mins(item.start), dayStart = 360, top = Math.max(0, (start - dayStart) / 60 * 64), height = Math.max(28, ((item.duration || (mins(item.end) - start)) / 60) * 64 - 3);
   const klass = type === 'free' ? 'free' : type === 'pending' ? 'pending' : (item.area || 'Career').toLowerCase();
   const title = type === 'free' ? item.label : type === 'pending' ? `Pending · ${item.purpose}` : item.title;
-  return `<div class="time-block ${klass}" style="top:${top}px;height:${height}px"><b>${esc(title)}</b><small>${clock(start)} · ${duration(item.duration || mins(item.end) - start)}</small></div>`;
+  const drag=type==='task'?`draggable="true" data-planner-task="${item.id}"`:'';
+  return `<div class="time-block ${klass} ${ui.plannerSelected===item.id?'planner-selected':''}" ${drag} style="top:${top}px;height:${height}px;${type==='task'?`border-color:${color(item.area)}`:''}" title="${type==='task'?'Select, then choose another hour':''}"><b>${esc(title)}</b><small>${clock(start)} · ${duration(item.duration || mins(item.end) - start)}</small></div>`;
 }
 function fitSlots(task) {
   const start = mins(task.windowStart || '09:00'), end = mins(task.windowEnd || '18:00'), d = task.duration;
@@ -232,10 +297,10 @@ function plannerView() {
   const decisions = flexible.filter(t => t.plan === 'window');
   return `${pageHead('AN HOUR-BY-HOUR VIEW', `Plan the day.<br><em>Keep room for life.</em>`, `<button class="secondary" data-date-shift="-1">← Previous</button><button class="secondary" data-date-today>Today</button><button class="secondary" data-date-shift="1">Next →</button><button class="primary" data-open="freeModal">+ Mark free time</button>`)}
     <div class="planner-layout">
-      <section class="calendar-board"><div class="calendar-head"><span>${date === iso() ? 'TODAY' : 'DAY'}</span><div><strong>${dayLong(date)}</strong><span>${scheduled.length} commitments · ${duration(scheduled.reduce((n,t)=>n+t.duration,0))}</span></div></div><div class="timeline">${hourRows()}${blocks}</div></section>
+      <section class="calendar-board"><div class="calendar-head"><span>${date === iso() ? 'TODAY' : 'DAY'}</span><div><strong>${dayLong(date)}</strong><span>${scheduled.length} commitments · ${duration(scheduled.reduce((n,t)=>n+t.duration,0))}</span><small class="planner-drag-hint">Drag any task block to a new hour</small></div></div><div class="timeline">${hourRows()}${blocks}</div></section>
       <aside class="planner-side">
         ${decisions.map(t => `<article class="decision-card"><p class="eyebrow">DECIDE BY ${dateLabel(t.decideBy || iso()).toUpperCase()}</p><h3>${esc(t.title)}</h3><p>${duration(t.duration)} needed between ${clock(mins(t.windowStart))} and ${clock(mins(t.windowEnd))}. Choose when your energy fits.</p><div class="slot-picks">${fitSlots(t).map((s,i)=>`<button data-schedule="${t.id}" data-time="${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}"><b>${clock(s)}–${clock(s+t.duration)}</b>${i===1?'Best balance with your current plan':i===0?'Finish it early':'Keep the daytime flexible'}</button>`).join('')}</div></article>`).join('')}
-        <article class="unscheduled-card"><p class="eyebrow">STILL FLEXIBLE</p><h3>Tasks waiting for a home</h3><p>Scheduling one will turn it into a calendar block and preserve its context.</p>${flexible.filter(t=>t.plan!=='window').map(t=>`<div class="unscheduled-item"><b>${esc(t.title)}</b><span>${duration(t.duration)} · ${t.energy} energy</span><div class="slot-picks"><button data-schedule="${t.id}" data-time="15:00">Place at 3:00 PM</button></div></div>`).join('') || '<div class="empty"><b>Everything has a place.</b>No loose work on this day.</div>'}</article>
+        <article class="unscheduled-card"><p class="eyebrow">STILL FLEXIBLE</p><h3>Tasks waiting for a home</h3><p>Drag one onto an hour, or select it and tap an hour.</p>${flexible.filter(t=>t.plan!=='window').map(t=>`<div class="unscheduled-item ${ui.plannerSelected===t.id?'planner-selected':''}" draggable="true" data-planner-task="${t.id}"><b>${esc(t.title)}</b><span>${duration(t.duration)} · ${t.energy} energy</span><div class="slot-picks"><button data-schedule="${t.id}" data-time="15:00">Place at 3:00 PM</button></div></div>`).join('') || '<div class="empty"><b>Everything has a place.</b>No loose work on this day.</div>'}</article>
       </aside>
     </div>`;
 }
@@ -243,10 +308,10 @@ function plannerView() {
 function inboxView() {
   let tasks = state.tasks.filter(t => t.plan === 'inbox' && t.progress < 100);
   if (ui.space) tasks = tasks.filter(t => t.area === ui.space);
-  if (ui.category) tasks = state.tasks.filter(t => t.category === ui.category && t.progress < 100);
+  if (ui.category) tasks = state.tasks.filter(t => t.category === ui.category && (!ui.space||t.area===ui.space) && t.progress < 100);
   const title = ui.category || ui.space || 'Your inbox';
   return `${pageHead('CAPTURE FIRST, DECIDE SECOND', `${esc(title)}.<br><em>Nothing gets lost.</em>`, `<button class="primary" data-open="taskModal">+ Capture something</button>`)}
-    <div class="filter-bar"><button class="filter-chip ${!ui.space&&!ui.category?'active':''}" data-filter="all">All captures</button><button class="filter-chip ${ui.space==='Career'?'active':''}" data-filter="Career">Career</button><button class="filter-chip ${ui.space==='Personal'?'active':''}" data-filter="Personal">Personal</button><button class="filter-chip ${ui.space==='Growth'?'active':''}" data-filter="Growth">Growth</button></div>
+    <div class="filter-bar"><button class="filter-chip ${!ui.space&&!ui.category?'active':''}" data-filter="all">All captures</button>${state.taxonomy.map(area=>`<button class="filter-chip ${ui.space===area.name?'active':''}" data-filter="${esc(area.name)}">${esc(area.name)}</button>`).join('')}</div>
     <div class="inbox-layout"><section class="section-card"><div class="section-title"><div><h2>${tasks.length} things need a decision</h2><p>Keep categories useful without putting everything in one crowded list.</p></div></div><div class="task-list">${tasks.length ? tasks.map(taskCard).join('') : '<div class="empty"><b>Inbox zero.</b>Everything has been clarified.</div>'}</div></section>
     <aside class="triage-card"><p class="eyebrow">60-SECOND TRIAGE</p><h3>Ask only what matters.</h3><p>Every capture should become a clear action, a scheduled commitment, a waiting item or something you consciously release.</p><div class="triage-steps"><span><b>01</b> What does “done” mean?</span><span><b>02</b> What is the smallest next action?</span><span><b>03</b> Does it need time or only a deadline?</span><span><b>04</b> Which part of your life owns it?</span></div></aside></div>`;
 }
@@ -254,7 +319,7 @@ function inboxView() {
 function allView() {
   const query = (ui.allQuery || '').toLowerCase();
   const open = state.tasks.filter(matchesTaskFilter).filter(t => !query || [t.title,t.area,t.category,t.next].some(v=>String(v||'').toLowerCase().includes(query)));
-  const groups = ['Career','Personal','Growth'];
+  const groups = state.taxonomy.map(area=>area.name);
   return `${pageHead('THE GUARANTEED ESCAPE HATCH', `Every task.<br><em>No hidden corners.</em>`, `<button class="primary" data-open="taskModal">+ Capture</button>`)}
     <div class="all-toolbar"><input id="allSearch" value="${esc(ui.allQuery||'')}" placeholder="Filter every task by title, area, category or next action…"><span class="all-summary">${open.length} visible · ${state.tasks.filter(t=>t.progress>=100).length} completed</span></div>
     ${taskFilterBar()}
@@ -264,30 +329,30 @@ function allView() {
 
 function paperPosition(task, index, tasks = state.tasks.filter(t => t.progress < 100)) {
   if (state.paper.layout[task.id]) return state.paper.layout[task.id];
-  const areas = ['Career','Personal','Growth'], areaIndex = Math.max(0, areas.indexOf(task.area));
+  const areas = state.taxonomy.map(area=>area.name), areaIndex = Math.max(0, areas.indexOf(task.area));
   const peers = tasks.filter(t => t.area === task.area);
   const categories = [...new Set(peers.map(t => t.category))];
-  let y = 17;
+  const column=areaIndex%3,row=Math.floor(areaIndex/3);let y=17+row*32;
   for (const category of categories) {
     const categoryTasks = peers.filter(t => t.category === category);
     if (category === task.category) { y += 3 + Math.max(0, categoryTasks.indexOf(task)) * 9.3; break; }
     y += 3 + categoryTasks.length * 9.3;
   }
-  return { x: 6.2 + areaIndex * 31.3, y };
+  return { x: 6.2 + column * 31.3, y };
 }
 function paperHeadings(tasks) {
-  const areas = ['Career','Personal','Growth'];
+  const areas = state.taxonomy.map(area=>area.name);
   return areas.map((area, areaIndex) => {
     const peers = tasks.filter(t => t.area === area);
     if (!peers.length) return '';
     const categories = [...new Set(peers.map(t => t.category))];
-    let y = 15.2;
+    const column=areaIndex%3,row=Math.floor(areaIndex/3);let y=15.2+row*32;
     const categoryLabels = categories.map(category => {
-      const label = `<div class="paper-category-heading" style="left:${6.2 + areaIndex * 31.3}%;top:${y}%">${esc(category)}</div>`;
+      const label = `<div class="paper-category-heading" style="left:${6.2 + column * 31.3}%;top:${y}%">${esc(category)}</div>`;
       y += 3 + peers.filter(t => t.category === category).length * 9.3;
       return label;
     }).join('');
-    return `<div class="paper-area-heading" style="left:${6.2 + areaIndex * 31.3}%;top:10.5%;border-color:${color(area)}">${esc(area)} <span>${peers.length}</span></div>${categoryLabels}`;
+    return `<div class="paper-area-heading" style="left:${6.2 + column * 31.3}%;top:${10.5+row*32}%;border-color:${color(area)}">${esc(area)} <span>${peers.length}</span></div>${categoryLabels}`;
   }).join('');
 }
 function paperView() {
@@ -349,6 +414,7 @@ function insightsView() {
 function render() {
   const renderers = { today: todayView, planner: plannerView, inbox: inboxView, paper: paperView, all: allView, requests: requestsView, share: shareView, insights: insightsView };
   $('#app').innerHTML = attentionRail() + (renderers[ui.view] || todayView)();
+  renderLifeTree();
   $$('.nav-item,.mobile-nav button[data-view]').forEach(b => b.classList.toggle('active', b.dataset.view === ui.view));
   const todayOpen = state.tasks.filter(t => t.date === iso() && t.progress < 100).length;
   $('#todayCount').textContent = todayOpen; $('#plannerCount').textContent = state.tasks.filter(t => t.date === ui.planningDate && t.progress < 100).length;
@@ -356,7 +422,6 @@ function render() {
   $('#allCount').textContent = state.tasks.filter(t => t.progress < 100).length;
   $('#paperCount').textContent = state.tasks.filter(t => t.progress < 100).length;
   $('#requestCount').textContent = state.requests.filter(r => r.status === 'pending').length;
-  ['Career','Personal','Growth'].forEach(a => $(`#${a.toLowerCase()}Count`).textContent = state.tasks.filter(t => t.area === a && t.progress < 100).length);
   if (ui.view === 'paper') requestAnimationFrame(initPaperBoard);
 }
 
@@ -419,9 +484,8 @@ function renderSearchResults(query = '') {
 }
 function openSearch() { openModal('searchModal'); $('#globalSearch').value=''; renderSearchResults(); setTimeout(()=>$('#globalSearch').focus(),80); }
 
-const TASK_CATEGORIES = { Career:['College','DSA','Meetings','Projects'], Personal:['Health','Home','Relationships'], Growth:['Learning','Reading','Skills'] };
 function setTaskCategories(area, selected = '') {
-  const options=[...(TASK_CATEGORIES[area]||[])];if(selected&&!options.includes(selected))options.unshift(selected);
+  const options=[...(state.taxonomy.find(item=>item.name===area)?.categories||[])];if(selected&&!options.includes(selected))options.unshift(selected);
   $('#taskCategory').innerHTML = options.map(x=>`<option ${x===selected?'selected':''}>${esc(x)}</option>`).join('');
 }
 function openTaskEditor(task = null) {
@@ -431,7 +495,7 @@ function openTaskEditor(task = null) {
   $('#taskSubmit').textContent = task ? 'Save changes →' : 'Capture task →';
   $('#taskDelete').hidden = !task;
   $('#taskTitle').value = task?.title || '';
-  $('#taskArea').value = task?.area || 'Career'; setTaskCategories($('#taskArea').value, task?.category || 'College');
+  const area=task?.area||state.taxonomy[0]?.name||'Unsorted';populateAreaSelect($('#taskArea'),area);setTaskCategories(area,task?.category||state.taxonomy.find(item=>item.name===area)?.categories[0]||'General');
   $('#taskDuration').value = String(task?.duration || 60); $('#taskEnergy').value = task?.energy || 'medium';
   $('#taskPlan').value = task?.plan || 'inbox'; $('#taskDate').min = task?.date && task.date < iso() ? task.date : iso(); $('#taskDate').value = task?.date || iso();
   $('#taskRepeat').value = task?.repeat || 'none'; $('#taskStart').value = task?.start || task?.windowStart || '10:00';
@@ -537,13 +601,13 @@ function addManualScanLine() {
 }
 function importScanToPaper() {
   const selected=scanRuntime.candidates.filter(item=>item.included&&item.text.trim());if(!selected.length)return;
-  const area=$('#scanArea').value,category=$('#scanCategory').value.trim()||'Scanned page',areaIndex=Math.max(0,['Career','Personal','Growth'].indexOf(area));
+  const area=$('#scanArea').value,category=$('#scanCategory').value.trim()||'Scanned page',areaIndex=Math.max(0,state.taxonomy.findIndex(item=>item.name===area));
   let taskCount=0,noteCount=0;
   selected.forEach((item,index)=>{
     if(item.kind==='task'){
       const id=uid()+index;state.tasks.push({id,title:item.text.trim(),area,category,duration:30,energy:'medium',date:null,start:null,plan:'inbox',progress:item.completed?100:0,next:'Clarify the first action from this page',timer:false,publish:false,calendar:false,repeat:'none',postponed:0,createdAt:new Date().toISOString(),source:'page-scan',paperMarks:{circle:item.important,tick:false,box:false,star:false}});state.paper.sequence.push(id);taskCount++;
     } else {
-      const existing=state.paper.texts.length;state.paper.texts.push({id:uid()+index,x:6.2+areaIndex*31.3,y:Math.min(91,77+(existing%3)*5.4),text:item.text.trim(),type:item.kind==='heading'?'heading':'text',source:'page-scan'});noteCount++;
+      const existing=state.paper.texts.length;state.paper.texts.push({id:uid()+index,x:6.2+(areaIndex%3)*31.3,y:Math.min(91,77+(existing%3)*5.4),text:item.text.trim(),type:item.kind==='heading'?'heading':'text',source:'page-scan'});noteCount++;
     }
   });
   state.paper.imports.unshift({id:uid(),fileName:scanRuntime.file?.name||'Camera scan',importedAt:new Date().toISOString(),confidence:scanRuntime.confidence,count:selected.length});state.paper.imports=state.paper.imports.slice(0,20);
@@ -579,7 +643,7 @@ function initPaperBoard() {
   board.addEventListener('pointerup',end);board.addEventListener('pointercancel',end);
   $('#paperTitle')?.addEventListener('blur',event=>{state.paper.title=event.target.textContent.trim()||'Everything on my mind';save();});
   $$('[data-paper-text]').forEach(el=>el.addEventListener('blur',()=>{const note=state.paper.texts.find(n=>n.id===Number(el.dataset.paperText));if(note){note.text=el.textContent.trim();save();}}));
-  $('#paperQuickForm')?.addEventListener('submit',event=>{event.preventDefault();const input=$('#paperQuickInput'),title=input.value.trim();if(!title)return;const id=uid();state.tasks.push({id,title,area:'Personal',category:'Paper capture',duration:30,energy:'medium',date:null,start:null,plan:'inbox',progress:0,next:'Clarify this paper capture',timer:false,publish:false,calendar:false,postponed:0,paperMarks:{circle:false,tick:false,box:false,star:false}});state.paper.sequence.push(id);save();reward(5,'A scribble became a real task');toast('Task added from paper','It is also visible in Inbox and All Tasks.');render();});
+  $('#paperQuickForm')?.addEventListener('submit',event=>{event.preventDefault();const input=$('#paperQuickInput'),title=input.value.trim();if(!title)return;const id=uid(),area=state.taxonomy.find(item=>item.name==='Personal')||state.taxonomy[0],category=area.categories.includes('Paper capture')?'Paper capture':area.categories[0];state.tasks.push({id,title,area:area.name,category,duration:30,energy:'medium',date:null,start:null,plan:'inbox',progress:0,next:'Clarify this paper capture',timer:false,publish:false,calendar:false,postponed:0,paperMarks:{circle:false,tick:false,box:false,star:false}});state.paper.sequence.push(id);save();reward(5,'A scribble became a real task');toast('Task added from paper','It is also visible in Inbox and All Tasks.');render();});
   chooseTool('select');
 }
 
@@ -590,6 +654,8 @@ document.addEventListener('click', event => {
   if(event.target.closest('[data-scan-add-line]')){addManualScanLine();return;}
   const opener = event.target.closest('[data-open]'); if (opener) { opener.dataset.open==='taskModal'?openTaskEditor():openModal(opener.dataset.open); return; }
   const closer = event.target.closest('[data-close]'); if (closer) { closeModal(closer.dataset.close); return; }
+  const plannerTask=event.target.closest('[data-planner-task]');if(plannerTask&&!event.target.closest('[data-schedule]')){ui.plannerSelected=Number(plannerTask.dataset.plannerTask);render();toast('Task selected','Choose an hour on the timeline, or drag it there.');return;}
+  const plannerHour=event.target.closest('[data-planner-time]');if(plannerHour&&ui.plannerSelected){const task=state.tasks.find(item=>item.id===ui.plannerSelected);if(task){task.date=ui.planningDate;task.start=plannerHour.dataset.plannerTime;task.plan='fixed';save();ui.plannerSelected=null;render();toast('Task placed on the day',`${task.title} is now at ${clock(mins(task.start))}.`);}return;}
   if (event.target.closest('[data-attention-open]')) { setView('all'); return; }
   const startNow = event.target.closest('[data-start-now]'); if (startNow) { const task=state.tasks.find(t=>t.id===Number(startNow.dataset.startNow)); if(task) startTimer(task); return; }
   const placeTask = event.target.closest('[data-place-task]'); if (placeTask) { const task=state.tasks.find(t=>t.id===Number(placeTask.dataset.placeTask)); if(task) ui.planningDate=task.date||iso(); setView('planner'); return; }
@@ -623,7 +689,7 @@ document.addEventListener('click', event => {
   if (event.target.closest('[data-date-today]')) { ui.planningDate = iso(); render(); return; }
   const filter = event.target.closest('[data-filter]'); if (filter) { ui.space = filter.dataset.filter === 'all' ? null : filter.dataset.filter; ui.category = null; render(); return; }
   const space = event.target.closest('[data-space]'); if (space) { ui.view='inbox'; ui.space=space.dataset.space; ui.category=null; render(); return; }
-  const category = event.target.closest('[data-category]'); if (category) { ui.view='inbox'; ui.category=category.dataset.category; ui.space=null; render(); return; }
+  const category = event.target.closest('[data-category]'); if (category) { ui.view='inbox'; ui.category=category.dataset.category; ui.space=category.dataset.categoryArea||null; render(); return; }
   const reqAction = event.target.closest('[data-request-action]'); if (reqAction) {
     const card = reqAction.closest('[data-request]'), r = state.requests.find(x=>x.id===Number(card.dataset.request));
     if (reqAction.dataset.requestAction === 'accept') { r.status='approved'; state.tasks.push({ id:uid(), title:r.purpose, area:'Career', category:'Meetings', duration:r.duration, energy:'medium', date:r.date, start:r.start, plan:'fixed', progress:0, next:r.outcome, timer:false, publish:true, publicTitle:'Scheduled conversation', calendar:true, postponed:0 }); state.tasks.push({ id:uid(), title:`Prepare for: ${r.purpose}`, area:'Career', category:'Meetings', duration:20, energy:'low', date:r.date, start:null, plan:'today', progress:0, next:'Review the request context and expected result', timer:true, publish:false, calendar:false, postponed:0 }); reward(15,'A clear commitment was created'); toast('Request approved','Event and preparation task were added.'); }
@@ -652,16 +718,36 @@ document.addEventListener('change', event => {
   if(event.target.matches('[data-scan-important]')){const item=scanRuntime.candidates.find(x=>x.id===Number(event.target.dataset.scanImportant));if(item)item.important=event.target.checked;}
 });
 
+let plannerDragId=null;
+document.addEventListener('dragstart',event=>{const source=event.target.closest('[data-planner-task]');if(!source)return;plannerDragId=Number(source.dataset.plannerTask);event.dataTransfer.effectAllowed='move';event.dataTransfer.setData('text/plain',String(plannerDragId));});
+document.addEventListener('dragover',event=>{const target=event.target.closest('[data-planner-time]');if(!target)return;event.preventDefault();event.dataTransfer.dropEffect='move';target.classList.add('drag-over');});
+document.addEventListener('dragleave',event=>{event.target.closest('[data-planner-time]')?.classList.remove('drag-over');});
+document.addEventListener('drop',event=>{const target=event.target.closest('[data-planner-time]');if(!target)return;event.preventDefault();target.classList.remove('drag-over');const id=plannerDragId||Number(event.dataTransfer.getData('text/plain')),task=state.tasks.find(item=>item.id===id);plannerDragId=null;if(!task)return;task.date=ui.planningDate;task.start=target.dataset.plannerTime;task.plan='fixed';save();render();toast('Task placed on the day',`${task.title} is now at ${clock(mins(task.start))}.`);});
+document.addEventListener('dragend',()=>{$$('[data-planner-time].drag-over').forEach(el=>el.classList.remove('drag-over'));plannerDragId=null;});
+
 $('#captureTrigger').addEventListener('click',()=>openTaskEditor()); $('#mobileAdd').addEventListener('click',()=>openTaskEditor());
 $('#searchTrigger').addEventListener('click',openSearch); $('#mobileSearch').addEventListener('click',openSearch);
 $$('[data-view]').forEach(control => control.addEventListener('click', event => { event.preventDefault(); setView(control.dataset.view); }));
 $('#menuBtn').addEventListener('click',()=>$('#sidebar').classList.toggle('open'));
 $('#focusBtn').addEventListener('click',()=>{document.body.classList.toggle('focus-mode');toast(document.body.classList.contains('focus-mode')?'Focus mode on':'Focus mode off');});
+$('#settingsBtn').addEventListener('click',openSettings);
 $('#reminderBtn').addEventListener('click',toggleReminders);
 $('#lockWorkspace').addEventListener('click',async()=>{try{await fetch('/api/logout',{method:'POST'});}finally{location.replace('/');}});
 $('#scanCamera').addEventListener('change',event=>{acceptScanFile(event.target.files?.[0]);event.target.value='';});
 $('#scanUpload').addEventListener('change',event=>{acceptScanFile(event.target.files?.[0]);event.target.value='';});
 $('#scanRetry').addEventListener('click',recognizeScan);$('#scanImport').addEventListener('click',importScanToPaper);
+$('#exportBackup').addEventListener('click',exportBackup);
+$('#importBackup').addEventListener('change',event=>{const file=event.target.files?.[0];if(file)importBackupFile(file);event.target.value='';});
+$('#installApp').addEventListener('click',installWebsite);
+$('#reminderLead').addEventListener('change',event=>{state.preferences.reminderLead=Number(event.target.value);save();toast('Reminder timing saved',`Alerts will appear ${event.target.value} minutes before scheduled work.`);});
+$('#addArea').addEventListener('click',()=>{const palette=['#ff7962','#75a6ff','#9cbe52','#9a7bc1','#f2b84b'];taxonomyDraft.push({name:`Area ${taxonomyDraft.length+1}`,color:palette[taxonomyDraft.length%palette.length],originalName:null,categories:[{name:'General',originalName:null}]});renderTaxonomyEditor();});
+$('#saveTaxonomy').addEventListener('click',saveTaxonomy);
+$('#taxonomyEditor').addEventListener('input',event=>{if(event.target.matches('[data-tax-area-name]'))taxonomyDraft[Number(event.target.dataset.taxAreaName)].name=event.target.value;if(event.target.matches('[data-tax-area-color]'))taxonomyDraft[Number(event.target.dataset.taxAreaColor)].color=event.target.value;if(event.target.matches('[data-tax-category-name]')){const [areaIndex,categoryIndex]=event.target.dataset.taxCategoryName.split(':').map(Number);taxonomyDraft[areaIndex].categories[categoryIndex].name=event.target.value;}});
+$('#taxonomyEditor').addEventListener('click',event=>{
+  const add=event.target.closest('[data-tax-add-category]');if(add){taxonomyDraft[Number(add.dataset.taxAddCategory)].categories.push({name:'New category',originalName:null});renderTaxonomyEditor();return;}
+  const removeCategory=event.target.closest('[data-tax-remove-category]');if(removeCategory){const [areaIndex,categoryIndex]=removeCategory.dataset.taxRemoveCategory.split(':').map(Number),area=taxonomyDraft[areaIndex],category=area.categories[categoryIndex];if(category.originalName&&state.tasks.some(task=>task.area===area.originalName&&task.category===category.originalName)){toast('Category is still in use','Move its tasks before removing it.');return;}if(area.categories.length===1){toast('Keep at least one category in each area');return;}area.categories.splice(categoryIndex,1);renderTaxonomyEditor();return;}
+  const removeArea=event.target.closest('[data-tax-remove-area]');if(removeArea){const areaIndex=Number(removeArea.dataset.taxRemoveArea),area=taxonomyDraft[areaIndex];if(area.originalName&&state.tasks.some(task=>task.area===area.originalName)){toast('Area is still in use','Move its tasks before removing it.');return;}if(taxonomyDraft.length===1){toast('Keep at least one life area');return;}taxonomyDraft.splice(areaIndex,1);renderTaxonomyEditor();}
+});
 $('#taskArea').addEventListener('change',()=>setTaskCategories($('#taskArea').value));
 $('#taskForm').addEventListener('submit', event => {
   event.preventDefault(); const plan=$('#taskPlan').value, date=$('#taskDate').value || (plan==='inbox'?null:iso());
@@ -675,9 +761,12 @@ $('#taskDelete').addEventListener('click',()=>{const id=ui.editTaskId;if(!id)ret
 $('#freeForm').addEventListener('submit',event=>{event.preventDefault();state.availability.push({id:uid(),date:$('#freeDate').value,start:$('#freeStart').value,end:$('#freeEnd').value,label:$('#freeLabel').value,max:Number($('#freeMax').value)});save();closeModal('freeModal');toast('Free time published','Visitors can request this window, subject to approval.');render();});
 $('#timerToggle').addEventListener('click',()=>{if(!ui.timer)return;ui.timer.running=!ui.timer.running;$('#timerToggle').textContent=ui.timer.running?'Ⅱ':'▶';});
 $('#timerStop').addEventListener('click',finishTimer); $('#timerClose').addEventListener('click',closeTimer);
-$('#resetBtn').addEventListener('click',()=>{state=clone(seed);state.tasks.forEach(task=>{task.paperMarks={circle:false,tick:false,box:false,star:false};task.repeat='none';});state.paper={title:'Everything on my mind',strokes:[],shapes:[],texts:[{id:9001,x:7.5,y:11.5,text:'Do what matters. Leave room to breathe.',type:'note'}],layout:{},sequence:[],imports:[]};state.preferences={reminders:false,reminderLead:10,notified:{}};save();ui={view:'today',space:null,category:null,planningDate:iso(),rescueId:null,timer:null,taskFilter:'open'};closeTimer();render();updateReminderUI();toast('Demo restored','All sample data is back.');});
+$('#resetBtn').addEventListener('click',()=>{state=clone(seed);state.tasks.forEach(task=>{task.paperMarks={circle:false,tick:false,box:false,star:false};task.repeat='none';});state.paper={title:'Everything on my mind',strokes:[],shapes:[],texts:[{id:9001,x:7.5,y:11.5,text:'Do what matters. Leave room to breathe.',type:'note'}],layout:{},sequence:[],imports:[]};state.preferences={reminders:false,reminderLead:10,notified:{}};save();ui={view:'today',space:null,category:null,planningDate:iso(),rescueId:null,timer:null,taskFilter:'open',plannerSelected:null};closeTimer();render();updateReminderUI();toast('Demo restored','All sample data is back.');});
 $$('.modal-layer').forEach(layer=>layer.addEventListener('click',e=>{if(e.target===layer)closeModal(layer.id);}));
 document.addEventListener('keydown',e=>{const typing=['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName);if((e.key==='c'||e.key==='C')&&!typing)openTaskEditor();if(e.key==='/'&&!typing){e.preventDefault();openSearch();}if(e.key==='Escape')$$('.modal-layer.open').forEach(m=>closeModal(m.id));});
 
-const now=new Date();$('#dateDay').textContent=now.getDate();$('#dateMonth').textContent=now.toLocaleDateString('en-US',{month:'short'}).toUpperCase();$('#taskDate').value=iso();$('#taskDate').min=iso();$('#decideBy').value=iso();$('#freeDate').value=iso(addDays(1));$('#freeDate').min=iso();
+const now=new Date();$('#dateDay').textContent=now.getDate();$('#dateMonth').textContent=now.toLocaleDateString('en-US',{month:'short'}).toUpperCase();$('#taskDate').value=iso();$('#taskDate').min=iso();$('#decideBy').value=iso();$('#freeDate').value=iso(addDays(1));$('#freeDate').min=iso();populateAreaSelect($('#taskArea'));setTaskCategories($('#taskArea').value);populateAreaSelect($('#scanArea'));
+window.addEventListener('beforeinstallprompt',event=>{event.preventDefault();installPrompt=event;document.body.classList.add('install-ready');});
+window.addEventListener('appinstalled',()=>{installPrompt=null;document.body.classList.remove('install-ready');toast('Life Command Center installed','Open it from your home screen or app list.');});
+if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}));
 if(location.hash.startsWith('#invite=')){setTimeout(visitorPreview,100);} render(); updateReminderUI(); initializeCloud(); setInterval(scanReminders,30000); scanReminders();
