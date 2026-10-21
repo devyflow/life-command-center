@@ -201,9 +201,32 @@ async function importBackupFile(file){
     state=clone(incoming);normalizeStateShape();saveLocal();sync.dirty=true;await pushCloudState(true);populateAreaSelect($('#taskArea'));populateAreaSelect($('#scanArea'));render();updateReminderUI();closeModal('settingsModal');toast('Backup restored',`${state.tasks.length} tasks are available on this device and cloud.`);
   }catch(error){toast('Backup could not be restored',error.message||'Choose a valid JSON backup.');}
 }
+const isInstalledApp=()=>window.matchMedia('(display-mode: standalone)').matches||Boolean(navigator.standalone);
+const isIosDevice=()=>/iphone|ipad|ipod/i.test(navigator.userAgent);
+function hideInstallNudge(remember=false){
+  const nudge=$('#installNudge');nudge?.classList.remove('show');nudge?.setAttribute('aria-hidden','true');
+  if(remember){try{sessionStorage.setItem('life-command-install-dismissed','1');}catch{}}
+}
+function showInstallNudge(){
+  if(isInstalledApp())return;
+  try{if(sessionStorage.getItem('life-command-install-dismissed'))return;}catch{}
+  const nudge=$('#installNudge'),title=$('#installNudgeTitle'),text=$('#installNudgeText'),action=$('#installNudgeAction');if(!nudge)return;
+  $('#installApp').hidden=false;
+  title.textContent='Install Life Command Center';
+  text.textContent=isIosDevice()?'Add it to your iPhone home screen for faster access.':'Open it like an app from your desktop or home screen.';
+  action.textContent=isIosDevice()?'Show iPhone steps →':'Install app →';action.hidden=false;action.dataset.instructions='';
+  nudge.setAttribute('aria-hidden','false');nudge.classList.add('show');
+}
 async function installWebsite(){
-  if(!installPrompt){toast('Install from your browser menu','Choose “Install app” or “Add to Home Screen”.');return;}
-  installPrompt.prompt();await installPrompt.userChoice;installPrompt=null;document.body.classList.remove('install-ready');
+  if(isInstalledApp()){hideInstallNudge(true);toast('Already installed','Life Command Center is running as an app.');return;}
+  if(installPrompt){
+    installPrompt.prompt();const choice=await installPrompt.userChoice;if(choice.outcome==='accepted'){hideInstallNudge(true);toast('Installing Life Command Center','It will appear in your app list or on your home screen.');}else hideInstallNudge(true);installPrompt=null;document.body.classList.remove('install-ready');return;
+  }
+  const title=$('#installNudgeTitle'),text=$('#installNudgeText'),action=$('#installNudgeAction');
+  if(action?.dataset.instructions==='shown'){hideInstallNudge(true);return;}
+  if(title)title.textContent=isIosDevice()?'Add to your Home Screen':'Install from your browser';
+  if(text)text.textContent=isIosDevice()?'In Safari, tap the Share button, then choose “Add to Home Screen”.':'Open the browser menu and choose “Install app” or “Add to Home Screen”.';
+  if(action){action.textContent='Got it';action.dataset.instructions='shown';}
 }
 
 const hasMark = (task, mark) => Boolean(task.paperMarks?.[mark]);
@@ -801,6 +824,8 @@ $('#exportBackup').addEventListener('click',exportBackup);
 $('#clearCompletedHistory').addEventListener('click',clearCompletedHistory);
 $('#importBackup').addEventListener('change',event=>{const file=event.target.files?.[0];if(file)importBackupFile(file);event.target.value='';});
 $('#installApp').addEventListener('click',installWebsite);
+$('#installNudgeAction').addEventListener('click',installWebsite);
+$('#installNudgeDismiss').addEventListener('click',()=>hideInstallNudge(true));
 $('#reminderLead').addEventListener('change',event=>{state.preferences.reminderLead=Number(event.target.value);save();toast('Reminder timing saved',`Alerts will appear ${event.target.value} minutes before scheduled work.`);});
 $('#addArea').addEventListener('click',()=>{const palette=['#ff7962','#75a6ff','#9cbe52','#9a7bc1','#f2b84b'];taxonomyDraft.push({name:`Area ${taxonomyDraft.length+1}`,color:palette[taxonomyDraft.length%palette.length],originalName:null,categories:[{name:'General',originalName:null}]});renderTaxonomyEditor();});
 $('#saveTaxonomy').addEventListener('click',saveTaxonomy);
@@ -828,7 +853,7 @@ $$('.modal-layer').forEach(layer=>layer.addEventListener('click',e=>{if(e.target
 document.addEventListener('keydown',e=>{const typing=['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName);if((e.key==='c'||e.key==='C')&&!typing)openTaskEditor();if(e.key==='/'&&!typing){e.preventDefault();openSearch();}if(e.key==='Escape')$$('.modal-layer.open').forEach(m=>closeModal(m.id));});
 
 const now=new Date();$('#dateDay').textContent=now.getDate();$('#dateMonth').textContent=now.toLocaleDateString('en-US',{month:'short'}).toUpperCase();$('#taskDate').value=iso();$('#taskDate').min=iso();$('#decideBy').value=iso();$('#freeDate').value=iso(addDays(1));$('#freeDate').min=iso();populateAreaSelect($('#taskArea'));setTaskCategories($('#taskArea').value);populateAreaSelect($('#scanArea'));
-window.addEventListener('beforeinstallprompt',event=>{event.preventDefault();installPrompt=event;document.body.classList.add('install-ready');});
-window.addEventListener('appinstalled',()=>{installPrompt=null;document.body.classList.remove('install-ready');toast('Life Command Center installed','Open it from your home screen or app list.');});
+window.addEventListener('beforeinstallprompt',event=>{event.preventDefault();installPrompt=event;document.body.classList.add('install-ready');showInstallNudge();});
+window.addEventListener('appinstalled',()=>{installPrompt=null;document.body.classList.remove('install-ready');hideInstallNudge(true);$('#installApp').hidden=true;toast('Life Command Center installed','Open it from your home screen or app list.');});
 if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}));
-if(location.hash.startsWith('#invite=')){setTimeout(visitorPreview,100);} render(); updateReminderUI(); initializeCloud(); setInterval(scanReminders,30000); scanReminders();
+if(location.hash.startsWith('#invite=')){setTimeout(visitorPreview,100);} render(); updateReminderUI(); initializeCloud(); setTimeout(showInstallNudge,1400); setInterval(scanReminders,30000); scanReminders();

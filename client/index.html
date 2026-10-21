@@ -13,7 +13,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&family=Newsreader:ital,opsz,wght@1,6..72,500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=paper-scan-v1">
+  <link rel="stylesheet" href="styles.css?v=install-v1">
 </head>
 <body>
   <div class="grain" aria-hidden="true"></div>
@@ -172,9 +172,13 @@
   </div>
 
   <div class="timer-dock" id="timerDock"><button class="timer-ring" id="timerToggle">▶</button><div><small>FOCUSING ON</small><strong id="timerTask">Task</strong></div><time id="timerTime">25:00</time><button class="timer-stop" id="timerStop">Finish session</button><button class="bare" id="timerClose">×</button></div>
+  <aside class="install-nudge" id="installNudge" aria-live="polite" aria-label="Install Life Command Center" aria-hidden="true">
+    <button class="install-nudge-close" id="installNudgeDismiss" type="button" aria-label="Not now">×</button>
+    <span class="install-nudge-icon">L</span><div><small>KEEP IT WITH YOU</small><b id="installNudgeTitle">Install Life Command Center</b><p id="installNudgeText">Open it like an app from your desktop or home screen.</p><button id="installNudgeAction" type="button">Install app →</button></div>
+  </aside>
   <div class="toast" id="toast"><span>✓</span><div><b id="toastTitle">Saved</b><small id="toastText">Your change is ready.</small></div></div>
   <div class="xp-burst" id="xpBurst"><span>✦</span><b id="xpBurstValue">+10 XP</b><small id="xpBurstText">Momentum earned</small></div>
-  <script src="app.js?v=history-v1"></script>
+  <script src="app.js?v=install-v1"></script>
   <script type="module" src="scene.js?v=cloud-foundation-v1"></script>
 </body>
 </html>
