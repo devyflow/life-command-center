@@ -29,17 +29,21 @@ export function createSession(secret, lifetimeSeconds = SESSION_SECONDS) {
   return `${expires}.${signature(expires, secret)}`;
 }
 
-export function validSession(request, secret = process.env.ACCESS_SECRET) {
+export function sessionDetails(request, secret = process.env.ACCESS_SECRET) {
   if (!secret) return false;
   const token = readCookie(request, ACCESS_COOKIE);
   if (!token) return false;
   const [expiresText, supplied] = token.split(".");
   const expires = Number(expiresText);
-  if (!Number.isFinite(expires) || expires <= Math.floor(Date.now() / 1000) || !supplied) return false;
+  const now = Math.floor(Date.now() / 1000);
+  if (!Number.isFinite(expires) || expires <= now || !supplied) return false;
   const expected = signature(expiresText, secret);
   const left = Buffer.from(supplied), right = Buffer.from(expected);
-  return left.length === right.length && timingSafeEqual(left, right);
+  if (left.length !== right.length || !timingSafeEqual(left, right)) return false;
+  return { token, expires, remembered:expires-now>SESSION_SECONDS };
 }
+
+export function validSession(request, secret = process.env.ACCESS_SECRET) { return Boolean(sessionDetails(request, secret)); }
 
 export function secretMatches(candidate, secret = process.env.ACCESS_SECRET) {
   if (!secret || typeof candidate !== "string" || candidate.length > 200) return false;
@@ -64,10 +68,15 @@ export async function readJsonBody(request) {
 }
 
 export function sessionCookie(value, maxAge = null) {
-  const persistence = Number.isFinite(maxAge) && maxAge > 0 ? `; Max-Age=${Math.floor(maxAge)}` : "";
-  return `${ACCESS_COOKIE}=${value}; Path=/${persistence}; HttpOnly; Secure; SameSite=Strict`;
+  const attributes = [`${ACCESS_COOKIE}=${value}`, "Path=/"];
+  if (Number.isFinite(maxAge) && maxAge > 0) {
+    attributes.push(`Max-Age=${Math.floor(maxAge)}`);
+    attributes.push(`Expires=${new Date(Date.now()+Math.floor(maxAge)*1000).toUTCString()}`);
+  }
+  attributes.push("HttpOnly", "Secure", "SameSite=Lax", "Priority=High");
+  return attributes.join("; ");
 }
 
 export function clearedSessionCookie() {
-  return `${ACCESS_COOKIE}=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Strict`;
+  return `${ACCESS_COOKIE}=; Path=/; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; Secure; SameSite=Lax; Priority=High`;
 }

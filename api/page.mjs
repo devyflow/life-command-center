@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { validSession } from "./_auth.mjs";
+import { createSession, REMEMBERED_SESSION_SECONDS, sessionCookie, sessionDetails } from "./_auth.mjs";
 
 const [appPage, lockPage] = await Promise.all([
   readFile(new URL("../client/index.html", import.meta.url), "utf8"),
@@ -7,9 +7,10 @@ const [appPage, lockPage] = await Promise.all([
 ]);
 
 export default function handler(request, response) {
+  const session = sessionDetails(request);
   response.statusCode = 200;
   response.setHeader("content-type", "text/html; charset=utf-8");
   response.setHeader("cache-control", "no-store");
-  response.end(validSession(request) ? appPage : lockPage);
+  if (session?.remembered) response.setHeader("set-cookie", sessionCookie(createSession(process.env.ACCESS_SECRET, REMEMBERED_SESSION_SECONDS), REMEMBERED_SESSION_SECONDS));
+  response.end(session ? appPage : lockPage);
 }
-
