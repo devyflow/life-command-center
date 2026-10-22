@@ -10,11 +10,12 @@ let preference = 'auto';
 try { preference = localStorage.getItem('life-command-3d') || 'auto'; } catch {}
 if (!['auto', 'off', 'on'].includes(preference)) preference = 'auto';
 
-let enabled = false, initialization = null, renderer = null, drawFrame = null;
+let enabled = false, initialization = null, renderer = null, drawFrame = null, coreMaterial = null;
 let scrolling = false, scrollTimer = 0, rendering = false, activeCard = null;
 let pointerFrame = 0, latestPointer = null;
 const pointer = { x:0, y:0, tx:0, ty:0 };
 const tiltSelector = '.metric,.attention-section,.section-card,.decision-card,.unscheduled-card,.request-card,.share-settings,.public-card,.insight-card,.now-card';
+function syncSceneAccent(){const accent=getComputedStyle(document.documentElement).getPropertyValue('--lime').trim()||'#c9f46c';coreMaterial?.color?.set(accent);}
 
 function clearTilt() {
   if (!activeCard) return;
@@ -72,6 +73,7 @@ effectsSelect?.addEventListener('change', event => chooseEffects(event.target.va
 [reducedMotion, compactDevice, standaloneMode].forEach(query => query.addEventListener('change', applyEffects));
 document.addEventListener('visibilitychange', refreshLoop);
 document.addEventListener('life-modal-change', refreshLoop);
+document.addEventListener('life-accent-change',()=>{syncSceneAccent();if(rendering)drawFrame?.(performance.now());});
 document.addEventListener('scroll', () => {
   scrolling = true;
   refreshLoop();
@@ -92,7 +94,8 @@ function initializeScene() {
     const camera = new THREE.PerspectiveCamera(38, innerWidth / innerHeight, .1, 100);
     camera.position.set(0, 0, 7.5);
     const world = new THREE.Group(); scene.add(world);
-    const core = new THREE.Mesh(new THREE.IcosahedronGeometry(1.18, 1), new THREE.MeshPhysicalMaterial({color:0xc9f46c,roughness:.4,metalness:.08,transparent:true,opacity:.5,flatShading:true})); world.add(core);
+    coreMaterial = new THREE.MeshPhysicalMaterial({color:0xc9f46c,roughness:.4,metalness:.08,transparent:true,opacity:.5,flatShading:true});syncSceneAccent();
+    const core = new THREE.Mesh(new THREE.IcosahedronGeometry(1.18, 1), coreMaterial); world.add(core);
     const shell = new THREE.Mesh(new THREE.IcosahedronGeometry(1.52, 1), new THREE.MeshBasicMaterial({color:0x111514,wireframe:true,transparent:true,opacity:.11})); world.add(shell);
     const rings = [2.05,2.48].map((radius,index) => {
       const ring = new THREE.Mesh(new THREE.TorusGeometry(radius,.012,6,72),new THREE.MeshBasicMaterial({color:0x111514,transparent:true,opacity:.14}));

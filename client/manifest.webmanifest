@@ -1,12 +1,16 @@
 {
   "name": "Life Command Center",
   "short_name": "Life Command",
+  "id": "/",
+  "lang": "en",
   "description": "Plan your hours, protect your attention, and keep every task visible.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "background_color": "#f0efe7",
   "theme_color": "#111514",
+  "categories": ["productivity", "utilities"],
+  "launch_handler": { "client_mode": "navigate-existing" },
   "share_target": {
     "action": "/?share-target=1",
     "method": "GET",

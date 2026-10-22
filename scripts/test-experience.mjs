@@ -16,7 +16,7 @@ function element() {
   };
 }
 const document = {
-  body:element(), activeElement:{tagName:'BODY'}, hidden:false,
+  body:element(), documentElement:{dataset:{}}, activeElement:{tagName:'BODY'}, hidden:false,
   querySelector(key){if(!elements.has(key))elements.set(key,element());return elements.get(key);},
   querySelectorAll(){return [];},createElement:element,dispatchEvent(){},
   addEventListener(type,listener){const list=listeners.get(type)||[];list.push(listener);listeners.set(type,list);}
@@ -125,12 +125,19 @@ const manifest=JSON.parse(await readFile(new URL('../client/manifest.webmanifest
 assert.equal(manifest.share_target.action,'/?share-target=1','Installed app can receive shared links');
 const serviceWorker=await readFile(new URL('../client/sw.js',import.meta.url),'utf8');
 assert.match(serviceWorker,/periodicsync/,'Supporting installed browsers can check reminders in the background');
-assert.match(serviceWorker,/life-command-static-v9/,'A new cache generation ships the polished interface');
+assert.match(serviceWorker,/life-command-static-v10/,'A new cache generation ships the polished interface');
 assert.match(serviceWorker,/freshAsset/,'JavaScript and CSS check the network before using stale cache');
 const page=await readFile(new URL('../client/index.html',import.meta.url),'utf8');
+const stylesheet=await readFile(new URL('../client/styles.css',import.meta.url),'utf8');
 assert.match(page,/id="mobileMore"/,'Mobile navigation keeps every section reachable through More');
 assert.match(page,/data-task-plan-show="window"/,'Task capture progressively reveals flexible-window fields');
 assert.match(page,/id="toastAction"/,'Destructive actions can offer an inline recovery action');
+assert.match(page,/id="focusExit"/,'Focus mode always has a visible exit control');
+assert.match(page,/id="focusSidebar"/,'Installed mobile users can enter focus mode from More');
+assert.match(page,/id="accentChoice"/,'Users can choose an interface accent on their device');
+assert.match(source,/else if\(e\.key==='Escape'&&document\.body\.classList\.contains\('focus-mode'\)\)setFocusMode\(false\)/,'Escape exits focus mode when no dialog is open');
+assert.match(source,/\$\('#focusExit'\)\.addEventListener\('pointerdown'/,'The floating focus exit responds directly to touch input');
+assert.match(stylesheet,/\.focus-mode \.install-nudge,\.focus-mode \.update-nudge\{display:none!important\}/,'Focus mode hides install and update prompts');
 console.log('Workspace: dense Paper layout, deliberate floating, bulletin normalization and contextual library retrieval passed.');
 
 // The lifecycle test replaces only WebGL construction. Real mode/visibility handlers run unchanged.

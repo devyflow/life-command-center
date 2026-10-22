@@ -5,6 +5,13 @@ const STANDALONE_MODE = window.matchMedia('(display-mode: standalone)').matches 
 const LIGHTWEIGHT_MODE = STANDALONE_MODE || window.matchMedia('(max-width: 760px), (pointer: coarse), (prefers-reduced-motion: reduce)').matches;
 document.body.classList.toggle('app-standalone', STANDALONE_MODE);
 document.body.classList.toggle('performance-mode', LIGHTWEIGHT_MODE);
+const ACCENTS = new Set(['lime','blue','coral','violet','amber']);
+let accentPreference = 'lime';
+try { accentPreference=localStorage.getItem('life-command-accent')||'lime'; } catch {}
+if(!ACCENTS.has(accentPreference))accentPreference='lime';
+function updateAccentControl(){$$('[data-accent]').forEach(button=>{const active=button.dataset.accent===accentPreference;button.classList.toggle('active',active);button.setAttribute('aria-pressed',String(active));});}
+function applyAccent(value,{announce=false}={}){accentPreference=ACCENTS.has(value)?value:'lime';document.documentElement.dataset.accent=accentPreference;try{localStorage.setItem('life-command-accent',accentPreference);}catch{}updateAccentControl();document.dispatchEvent(new Event('life-accent-change'));if(announce)toast('Accent updated','The interface colour changed on this device.');}
+applyAccent(accentPreference);
 const iso = (date = new Date()) => {
   const d = new Date(date); d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
   return d.toISOString().slice(0, 10);
@@ -192,7 +199,7 @@ function openSettings(){
   taxonomyDraft=taxonomyDraftFromState();renderTaxonomyEditor();
   $('#settingsSync').textContent=$('#syncStatus').textContent||'Cloud status unavailable';
   $('#settingsUpdated').textContent=state.meta?.updatedAt?new Date(state.meta.updatedAt).toLocaleString():'No changes yet';
-  $('#reminderLead').value=String(state.preferences.reminderLead||10);updateCompletedHistoryControl();updateMotivationControl();openModal('settingsModal');
+  $('#reminderLead').value=String(state.preferences.reminderLead||10);updateAccentControl();updateCompletedHistoryControl();updateMotivationControl();openModal('settingsModal');
 }
 function saveTaxonomy(){
   const clean=taxonomyDraft.map(area=>({name:area.name.trim(),color:area.color,categories:area.categories.map(c=>c.name.trim()).filter(Boolean)}));
@@ -342,6 +349,18 @@ function toast(title, text = 'Your change is ready.', action = null) {
   const button=$('#toastAction');button.hidden=!action;button.textContent=action?.label||'Undo';
   $('#toast').classList.add('show'); toastTimer=setTimeout(() => { $('#toast').classList.remove('show');toastAction=null;button.hidden=true; }, action?8000:3000);
 }
+function setFocusMode(enabled,{announce=true}={}) {
+  document.body.classList.toggle('focus-mode',enabled);
+  $('#focusBtn')?.setAttribute('aria-pressed',String(enabled));
+  $('#focusBtn')?.setAttribute('title',enabled?'Exit focus mode':'Enter focus mode');
+  const topLabel=$('#focusBtn span');if(topLabel)topLabel.textContent=enabled?'Exit':'Focus';
+  $('#focusSidebar')?.classList.toggle('active',enabled);$('#focusSidebar')?.setAttribute('aria-pressed',String(enabled));
+  if($('#focusSidebarState'))$('#focusSidebarState').textContent=enabled?'On':'Off';
+  $('#focusExit')?.setAttribute('aria-hidden',String(!enabled));
+  $('#sidebar').classList.remove('open');$('#menuBtn').setAttribute('aria-expanded','false');$('#mobileMore')?.setAttribute('aria-expanded','false');
+  if(announce)toast(enabled?'Focus view ready':'Full workspace restored',enabled?'Only the current work and an always-visible exit remain.':'Navigation and planning controls are visible again.');
+}
+function toggleFocusMode(){setFocusMode(!document.body.classList.contains('focus-mode'));}
 function openModal(id) {
   modalReturnFocus=document.activeElement;
   $$('.modal-layer.open').forEach(layer=>{layer.classList.remove('open');layer.setAttribute('aria-hidden','true');});
@@ -370,7 +389,7 @@ function taskCard(task) {
   return `<article class="task-row ${done ? 'done' : ''} ${marked ? 'paper-important' : ''}" data-task="${task.id}">
     <button class="task-check" data-action="complete" aria-label="${done ? 'Mark incomplete' : 'Complete task'}">${done ? '✓' : ''}</button>
     <div><div class="task-title">${esc(task.title)}</div><div class="task-meta"><span class="mini-dot" style="background:${color(task.area)}"></span>${esc(task.area)} / ${esc(task.category)} · ${duration(task.duration)} <span class="energy">${task.energy}</span>${task.start ? ` · ${clock(mins(task.start))}` : ''}${task.repeat&&task.repeat!=='none'?` · repeats ${task.repeat}`:''}${order>=0?` <span class="paper-order">Paper #${order+1}</span>`:''}</div>${taskMarkButtons(task)}</div>
-    <div class="task-side"><button class="icon-action" data-action="edit" title="Edit task">✎</button><button class="icon-action" data-action="timer" title="Start timer">◷</button><button class="icon-action" data-action="calendar" title="Export calendar event">▣</button><button class="icon-action" data-action="publish" title="${task.publish ? 'Remove from shared calendar' : 'Show on shared calendar'}">${task.publish ? '●' : '○'}</button></div>
+    <div class="task-side"><button class="icon-action" data-action="edit" title="Edit task" aria-label="Edit ${esc(task.title)}">✎</button><button class="icon-action" data-action="timer" title="Start timer" aria-label="Start focus timer for ${esc(task.title)}">◷</button><button class="icon-action" data-action="calendar" title="Export calendar event" aria-label="Export ${esc(task.title)} to calendar">▣</button><button class="icon-action" data-action="publish" title="${task.publish ? 'Remove from shared calendar' : 'Show on shared calendar'}" aria-label="${task.publish ? 'Remove from shared calendar' : 'Show on shared calendar'}">${task.publish ? '●' : '○'}</button></div>
     <label class="progress-line"><input type="range" min="0" max="100" step="5" value="${task.progress}" data-progress><span>${task.progress}%</span></label>
     ${task.next ? `<div class="next-step">Next: ${esc(task.next)}</div>` : ''}
   </article>`;
@@ -1069,7 +1088,9 @@ $('#menuBackdrop').addEventListener('click',()=>{$('#sidebar').classList.remove(
 $('#toastAction').addEventListener('click',()=>{const action=toastAction;toastAction=null;clearTimeout(toastTimer);$('#toast').classList.remove('show');$('#toastAction').hidden=true;action?.run?.();});
 $('#applyUpdate').addEventListener('click',()=>location.reload());
 $('#dismissUpdate').addEventListener('click',()=>{$('#updateNudge').hidden=true;});
-$('#focusBtn').addEventListener('click',()=>{document.body.classList.toggle('focus-mode');toast(document.body.classList.contains('focus-mode')?'Focus mode on':'Focus mode off');});
+$('#focusBtn').addEventListener('click',toggleFocusMode);$('#focusSidebar').addEventListener('click',toggleFocusMode);$('#focusExit').addEventListener('click',()=>setFocusMode(false));
+$('#focusExit').addEventListener('pointerdown',event=>{event.preventDefault();setFocusMode(false);},{passive:false});
+$('#accentChoice').addEventListener('click',event=>{const choice=event.target.closest('[data-accent]');if(choice)applyAccent(choice.dataset.accent,{announce:true});});
 $('#settingsBtn').addEventListener('click',openSettings);
 $('#reminderBtn').addEventListener('click',toggleReminders);
 $('#lockWorkspace').addEventListener('click',async()=>{try{await fetch('/api/logout',{method:'POST'});}finally{location.replace('/');}});
@@ -1119,7 +1140,7 @@ $$('.modal-layer').forEach(layer=>layer.addEventListener('click',e=>{if(e.target
 document.addEventListener('keydown',e=>{
   const typing=['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName),openLayer=$('.modal-layer.open');
   if(e.key==='Tab'&&openLayer){const focusable=$$('button:not([disabled]),[href],input:not([disabled]):not([type="hidden"]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])',openLayer).filter(el=>!el.hidden&&el.offsetParent!==null);if(focusable.length){const first=focusable[0],last=focusable.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}}}
-  if((e.key==='c'||e.key==='C')&&!typing&&!openLayer)openTaskEditor();if(e.key==='/'&&!typing&&!openLayer){e.preventDefault();openSearch();}if(e.key==='Escape'&&openLayer)closeModal(openLayer.id);
+  if((e.key==='c'||e.key==='C')&&!typing&&!openLayer)openTaskEditor();if(e.key==='/'&&!typing&&!openLayer){e.preventDefault();openSearch();}if(e.key==='Escape'&&openLayer)closeModal(openLayer.id);else if(e.key==='Escape'&&document.body.classList.contains('focus-mode'))setFocusMode(false);
 });
 
 const now=new Date();$('#dateDay').textContent=now.getDate();$('#dateMonth').textContent=now.toLocaleDateString('en-US',{month:'short'}).toUpperCase();$('#taskDate').value=iso();$('#taskDate').min=iso();$('#decideBy').value=iso();$('#freeDate').value=iso(addDays(1));$('#freeDate').min=iso();populateAreaSelect($('#taskArea'));setTaskCategories($('#taskArea').value);populateAreaSelect($('#scanArea'));

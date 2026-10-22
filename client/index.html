@@ -14,7 +14,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&family=Newsreader:ital,opsz,wght@1,6..72,500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=workspace-v5">
+  <link rel="stylesheet" href="styles.css?v=workspace-v6">
 </head>
 <body>
   <div class="grain" aria-hidden="true"></div>
@@ -35,6 +35,7 @@
       <p class="eyebrow">TOOLS</p>
       <button class="nav-item" data-view="share"><span>◎</span><b>Share time</b></button>
       <button class="nav-item" data-view="insights"><span>↗</span><b>Insights</b></button>
+      <button class="nav-item" id="focusSidebar"><span>◎</span><b>Focus view</b><i id="focusSidebarState">Off</i></button>
       <button class="nav-item" id="settingsBtn"><span>⚙</span><b>Data & organization</b></button>
       <button class="nav-item" id="reminderBtn"><span>◷</span><b>Browser reminders</b><i id="reminderState">Off</i></button>
       <button class="nav-item" id="lockWorkspace"><span>⌾</span><b>Lock workspace</b></button>
@@ -59,6 +60,8 @@
     </header>
     <div id="app" class="app-shell" aria-live="polite"></div>
   </main>
+
+  <button class="focus-exit" id="focusExit" type="button" aria-label="Exit focus mode"><span>←</span><b>Exit focus</b><small>Esc</small></button>
 
   <nav class="mobile-nav" aria-label="Mobile navigation">
     <button class="active" data-view="today"><span>⌁</span>Today<i id="mobileTodayCount"></i></button><button data-view="planner"><span>▦</span>Plan</button><button class="mobile-add" id="mobileAdd" aria-label="Add task">+</button><button data-view="paper"><span>✎</span>Paper</button><button id="mobileMore" aria-label="Open all sections" aria-controls="sidebar" aria-expanded="false"><span>•••</span>More<i id="mobileAttentionCount"></i></button>
@@ -125,6 +128,7 @@
           <label class="settings-select">Reminder lead time<select id="reminderLead"><option value="5">5 minutes</option><option value="10">10 minutes</option><option value="15">15 minutes</option><option value="30">30 minutes</option><option value="60">1 hour</option></select></label>
           <label class="settings-select effects-choice">Visual effects on this device<select id="visualEffects" aria-describedby="visualEffectsHint"><option value="auto">Automatic · smooth on mobile and installed app</option><option value="off">Smooth · fastest scrolling</option><option value="on">3D · animated background</option></select></label>
           <p id="visualEffectsHint" class="effects-hint">Choose the experience that feels best on this device.</p>
+          <fieldset class="accent-choice" id="accentChoice"><legend>Accent colour on this device</legend><p>Keep the interface familiar while choosing the colour that helps actions stand out.</p><div><button type="button" data-accent="lime" aria-label="Focus green"><i style="--swatch:#c9f46c"></i><span>Focus</span></button><button type="button" data-accent="blue" aria-label="Ocean blue"><i style="--swatch:#8fb9ff"></i><span>Ocean</span></button><button type="button" data-accent="coral" aria-label="Warm coral"><i style="--swatch:#ff9a86"></i><span>Warm</span></button><button type="button" data-accent="violet" aria-label="Soft violet"><i style="--swatch:#c4adff"></i><span>Violet</span></button><button type="button" data-accent="amber" aria-label="Clear amber"><i style="--swatch:#f5c95b"></i><span>Amber</span></button></div></fieldset>
           <div class="motivation-panel">
             <div class="motivation-head"><span class="motivation-symbol">✦</span><div><b id="momentumBadge">Fresh start</b><small id="momentumMeaning">One clear action is enough to begin.</small></div></div>
             <div class="motivation-stats"><span><b id="momentumXp">0 XP</b><small>Momentum</small></span><span><b id="rhythmDays">0 days</b><small>Productive rhythm</small></span></div>
@@ -228,7 +232,7 @@
   <aside class="update-nudge" id="updateNudge" aria-live="polite" hidden><span>↻</span><div><b>A fresher version is ready</b><small>Restart to load interface improvements. Your saved work is safe.</small></div><button id="applyUpdate" type="button">Restart</button><button id="dismissUpdate" class="bare" type="button" aria-label="Dismiss update">×</button></aside>
   <div class="toast" id="toast" role="status" aria-live="polite"><span>✓</span><div><b id="toastTitle">Saved</b><small id="toastText">Your change is ready.</small></div><button id="toastAction" type="button" hidden>Undo</button></div>
   <div class="xp-burst" id="xpBurst"><span>✦</span><b id="xpBurstValue">+10 XP</b><small id="xpBurstText">Momentum earned</small></div>
-  <script src="app.js?v=workspace-v5"></script>
-  <script type="module" src="scene.js?v=workspace-v5"></script>
+  <script src="app.js?v=workspace-v6"></script>
+  <script type="module" src="scene.js?v=workspace-v6"></script>
 </body>
 </html>
