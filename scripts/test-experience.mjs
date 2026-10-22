@@ -102,6 +102,10 @@ const densePaper=read(`(()=>{const plan=paperPlan(state.tasks),rects=[...plan.po
 assert.equal(densePaper.count,24);
 assert.equal(densePaper.overlaps,0,'Guided Paper placement must not overlap dense tasks');
 assert.ok(densePaper.height>=densePaper.maxBottom,'Paper must expand to contain every task');
+assert.equal(read('canvasView.paper.locked'),true,'Paper opens with layout protection enabled');
+assert.match(run('paperView()'),/data-canvas-lock="paper"/,'Paper exposes a clear canvas lock');
+assert.match(run('paperView()'),/data-canvas-zoom="paper:fit"/,'Paper can fit the whole page to a phone');
+assert.match(run('paperView()'),/id="paperStage"/,'Paper uses a scaled stage without changing saved coordinates');
 run(`state.paper.texts=[{id:90,x:7.5,y:11.5,text:'Legacy note',type:'note',mode:'placed',width:240,z:5}];normalizeStateShape();`);
 assert.equal(read(`(()=>{const plan=paperPlan(state.tasks),p=plan.textPositions.get(90),taskRects=[...plan.positions.values()].map(item=>({...item,w:300,h:76})),headRects=plan.headings.map((item,index)=>({key:'h'+index,x:item.x,y:item.y,w:330,h:item.kind==='area'?32:18}));return paperIsOverlap('text:90',{...p,w:240,h:88},[...taskRects.map((item,index)=>({key:'t'+index,...item})),...headRects]);})()`),false,'Guided Paper text must move away from tasks and section headings');
 run(`state.paper.layout[1]={x:100,y:140,unit:'px',mode:'float',z:9};`);
@@ -109,6 +113,10 @@ assert.equal(read(`paperPlan(state.tasks).positions.get(1).mode`),'float','Indiv
 run(`state.boardNotes=[{id:1,text:'A visible principle',x:-5,y:0,w:20,h:30,showGlance:true}];state.library=[{id:2,title:'Diagram tool',context:'presentations',tags:['design'],status:'ready'}];normalizeStateShape();`);
 assert.deepEqual(read(`({x:state.boardNotes[0].x,y:state.boardNotes[0].y,w:state.boardNotes[0].w,h:state.boardNotes[0].h})`),{x:12,y:35,w:170,h:145},'Board notes receive safe sizes and positions');
 assert.match(run('boardView()'),/data-board-note-float/);
+assert.equal(read('canvasView.board.locked'),true,'Bulletin opens with layout protection enabled');
+assert.match(run('boardView()'),/data-canvas-lock="board"/,'Bulletin exposes a clear canvas lock');
+assert.match(run('boardView()'),/data-canvas-zoom="board:fit"/,'Bulletin can fit the whole board to a phone');
+assert.match(run('boardView()'),/id="bulletinStage"/,'Bulletin uses a scaled stage without changing note positions');
 run(`ui.boardMenuId=1`);assert.match(run('boardView()'),/menu-open/,'Selected Bulletin controls stay open');
 run(`ui.libraryFilter='active';ui.libraryQuery='presentations'`);
 assert.equal(read(`state.library.filter(libraryMatches).length`),1,'Library search finds an item by its use context');
@@ -125,7 +133,7 @@ const manifest=JSON.parse(await readFile(new URL('../client/manifest.webmanifest
 assert.equal(manifest.share_target.action,'/?share-target=1','Installed app can receive shared links');
 const serviceWorker=await readFile(new URL('../client/sw.js',import.meta.url),'utf8');
 assert.match(serviceWorker,/periodicsync/,'Supporting installed browsers can check reminders in the background');
-assert.match(serviceWorker,/life-command-static-v10/,'A new cache generation ships the polished interface');
+assert.match(serviceWorker,/life-command-static-v11/,'A new cache generation ships the touch-safe canvases');
 assert.match(serviceWorker,/freshAsset/,'JavaScript and CSS check the network before using stale cache');
 const page=await readFile(new URL('../client/index.html',import.meta.url),'utf8');
 const stylesheet=await readFile(new URL('../client/styles.css',import.meta.url),'utf8');
@@ -137,6 +145,9 @@ assert.match(page,/id="focusSidebar"/,'Installed mobile users can enter focus mo
 assert.match(page,/id="accentChoice"/,'Users can choose an interface accent on their device');
 assert.match(source,/else if\(e\.key==='Escape'&&document\.body\.classList\.contains\('focus-mode'\)\)setFocusMode\(false\)/,'Escape exits focus mode when no dialog is open');
 assert.match(source,/\$\('#focusExit'\)\.addEventListener\('pointerdown'/,'The floating focus exit responds directly to touch input');
+assert.match(source,/if\(canvasView\.paper\.locked\)return/,'Paper blocks drawing and dragging while locked');
+assert.match(source,/if\(!el\|\|canvasView\.board\.locked\|\|el\.classList\.contains\('is-locked'\)\)return/,'Bulletin blocks note dragging while locked');
+assert.match(stylesheet,/\.canvas-surface-locked :is\(\.paper-board,\.paper-object,#paperCanvas,\.bulletin-board,\.bulletin-note\)\{touch-action:pan-x pan-y\}/,'Locked canvases reserve touch gestures for scrolling');
 assert.match(stylesheet,/\.focus-mode \.install-nudge,\.focus-mode \.update-nudge\{display:none!important\}/,'Focus mode hides install and update prompts');
 console.log('Workspace: dense Paper layout, deliberate floating, bulletin normalization and contextual library retrieval passed.');
 
