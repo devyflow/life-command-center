@@ -21,8 +21,9 @@ const document = {
   querySelectorAll(){return [];},createElement:element,dispatchEvent(){},
   addEventListener(type,listener){const list=listeners.get(type)||[];list.push(listener);listeners.set(type,list);}
 };
+const testLocation={hash:'#today'};
 const context = vm.createContext({
-  document,window:{matchMedia:()=>({matches:false}),scrollTo(){},addEventListener(){}},
+  document,location:testLocation,history:{},window:{matchMedia:()=>({matches:false}),scrollTo(){},addEventListener(){},history:{pushState(_state,_title,hash){testLocation.hash=hash;}}},
   navigator:{},localStorage:{getItem:key=>saved.get(key)||null,setItem:(key,value)=>saved.set(key,value)},
   sessionStorage:{getItem:()=>null,setItem(){}},setTimeout:()=>1,clearTimeout(){},setInterval:()=>1,clearInterval(){},
   requestAnimationFrame(){},Event,Blob,URL,console,
@@ -116,10 +117,20 @@ assert.equal(read(`knowledgeSuggestions(state.tasks[0],1)[0].item.id`),8,'Knowle
 assert.match(run('libraryView()'),/QUIET CONTEXTUAL SUGGESTIONS/);
 run(`renderSearchResults('diagram')`);
 assert.match(elements.get('#searchResults').textContent,/data-search-library="8"/,'Global search includes useful-library items');
+run(`state.tasks[0].sourceLibraryId=999;state.tasks[0].sourceLibraryIds=[8,999];state.library[0].taskId=999;normalizeStateShape();`);
+assert.equal(run(`typeof state.library[0].taskId`),'undefined','Orphaned task links are removed from Knowledge items');
+assert.equal(run(`typeof state.tasks[0].sourceLibraryId`),'undefined','Orphaned Knowledge sources are removed from tasks');
+assert.deepEqual(read(`state.tasks[0].sourceLibraryIds`),[8],'Valid Knowledge links survive normalization');
 const manifest=JSON.parse(await readFile(new URL('../client/manifest.webmanifest',import.meta.url),'utf8'));
 assert.equal(manifest.share_target.action,'/?share-target=1','Installed app can receive shared links');
 const serviceWorker=await readFile(new URL('../client/sw.js',import.meta.url),'utf8');
 assert.match(serviceWorker,/periodicsync/,'Supporting installed browsers can check reminders in the background');
+assert.match(serviceWorker,/life-command-static-v9/,'A new cache generation ships the polished interface');
+assert.match(serviceWorker,/freshAsset/,'JavaScript and CSS check the network before using stale cache');
+const page=await readFile(new URL('../client/index.html',import.meta.url),'utf8');
+assert.match(page,/id="mobileMore"/,'Mobile navigation keeps every section reachable through More');
+assert.match(page,/data-task-plan-show="window"/,'Task capture progressively reveals flexible-window fields');
+assert.match(page,/id="toastAction"/,'Destructive actions can offer an inline recovery action');
 console.log('Workspace: dense Paper layout, deliberate floating, bulletin normalization and contextual library retrieval passed.');
 
 // The lifecycle test replaces only WebGL construction. Real mode/visibility handlers run unchanged.

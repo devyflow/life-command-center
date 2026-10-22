@@ -32,7 +32,7 @@ const server=createServer(async(req,res)=>{
     }
     if(req.method!=='GET'||!files.has(path))return json({error:'Not found'},404);
     const file=files.get(path);let content=await readFile(new URL('../client/'+file,import.meta.url));
-    if(file==='index.html')content=Buffer.from(content.toString().replaceAll('workspace-v4',`qa-${Date.now()}`));
+    if(file==='index.html')content=Buffer.from(content.toString().replaceAll('workspace-v5',`qa-${Date.now()}`));
     res.writeHead(200,{'content-type':types[file.split('.').at(-1)]||'application/octet-stream'});res.end(content);
   }catch{json({error:'Local QA request failed'},500);}
 });

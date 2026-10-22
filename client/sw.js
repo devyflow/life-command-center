@@ -1,4 +1,4 @@
-const CACHE = "life-command-static-v8";
+const CACHE = "life-command-static-v9";
 const REMINDER_CACHE = "life-command-reminders-v1";
 const STATIC = ["/styles.css", "/app.js", "/scene.js", "/manifest.webmanifest", "/icon-192.png", "/icon-512.png"];
 
@@ -13,10 +13,12 @@ self.addEventListener("activate", event => {
 self.addEventListener("fetch", event => {
   const url = new URL(event.request.url);
   if (event.request.method !== "GET" || url.origin !== location.origin || url.pathname === "/" || url.pathname.startsWith("/api/")) return;
-  event.respondWith(caches.match(event.request).then(cached => cached || fetch(event.request).then(response => {
-    if (response.ok) caches.open(CACHE).then(cache => cache.put(event.request, response.clone()));
-    return response;
-  })));
+  const freshAsset=/\.(?:js|css)$/.test(url.pathname);
+  if(freshAsset){
+    event.respondWith(fetch(event.request).then(response=>{if(response.ok)caches.open(CACHE).then(cache=>cache.put(event.request,response.clone()));return response;}).catch(()=>caches.match(event.request).then(cached=>cached||caches.match(url.pathname))));
+    return;
+  }
+  event.respondWith(caches.match(event.request).then(cached => cached || fetch(event.request).then(response => {if (response.ok) caches.open(CACHE).then(cache => cache.put(event.request, response.clone()));return response;})));
 });
 
 self.addEventListener("notificationclick", event => {

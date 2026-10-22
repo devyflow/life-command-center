@@ -14,7 +14,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&family=Newsreader:ital,opsz,wght@1,6..72,500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=workspace-v4">
+  <link rel="stylesheet" href="styles.css?v=workspace-v5">
 </head>
 <body>
   <div class="grain" aria-hidden="true"></div>
@@ -61,7 +61,7 @@
   </main>
 
   <nav class="mobile-nav" aria-label="Mobile navigation">
-    <button class="active" data-view="today"><span>⌁</span>Today</button><button data-view="planner"><span>▦</span>Plan</button><button class="mobile-add" id="mobileAdd" aria-label="Add task">+</button><button data-view="paper"><span>✎</span>Paper</button><button data-view="board"><span>▤</span>Board</button><button data-view="library"><span>⌘</span>Library</button>
+    <button class="active" data-view="today"><span>⌁</span>Today<i id="mobileTodayCount"></i></button><button data-view="planner"><span>▦</span>Plan</button><button class="mobile-add" id="mobileAdd" aria-label="Add task">+</button><button data-view="paper"><span>✎</span>Paper</button><button id="mobileMore" aria-label="Open all sections" aria-controls="sidebar" aria-expanded="false"><span>•••</span>More<i id="mobileAttentionCount"></i></button>
   </nav>
 
   <div class="modal-layer" id="searchModal" aria-hidden="true">
@@ -82,12 +82,12 @@
           <label>Category<select id="taskCategory"><option>College</option><option>DSA</option><option>Meetings</option><option>Projects</option></select></label>
           <label>Duration<select id="taskDuration"><option value="15">15 minutes</option><option value="30">30 minutes</option><option value="45">45 minutes</option><option value="60" selected>1 hour</option><option value="90">1.5 hours</option><option value="120">2 hours</option></select></label>
           <label>Energy<select id="taskEnergy"><option value="low">Low</option><option value="medium" selected>Medium</option><option value="high">High</option></select></label>
-          <label>Plan type<select id="taskPlan"><option value="inbox">Decide later</option><option value="today">Today, flexible time</option><option value="fixed">Fixed time</option><option value="window">Flexible window</option></select></label>
-          <label>Date<input id="taskDate" type="date"></label>
+          <label>Plan type<select id="taskPlan"><option value="inbox">Decide later</option><option value="today">Flexible day</option><option value="fixed">Fixed time</option><option value="window">Flexible time window</option></select><small class="field-help" id="taskPlanHint">Keep it safely in your Inbox until you decide.</small></label>
+          <label data-task-plan-show="scheduled">Date<input id="taskDate" type="date"></label>
           <label>Repeat<select id="taskRepeat"><option value="none">Does not repeat</option><option value="daily">Every day</option><option value="weekly">Every week</option><option value="monthly">Every month</option></select></label>
-          <label>Earliest time<input id="taskStart" type="time" value="10:00"></label>
-          <label>Latest time<input id="taskEnd" type="time" value="18:00"></label>
-          <label>Decide exact time by<input id="decideBy" type="date"></label>
+          <label data-task-plan-show="timed"><span id="taskStartLabel">Start time</span><input id="taskStart" type="time" value="10:00"></label>
+          <label data-task-plan-show="window">Latest time<input id="taskEnd" type="time" value="18:00"></label>
+          <label data-task-plan-show="window">Decide exact time by<input id="decideBy" type="date"></label>
           <label>First tiny step<input id="taskNext" type="text" placeholder="Open notes and outline"></label>
         </div>
         <div class="capture-marks"><span>Paper meaning</span><label><input id="taskCircle" type="checkbox"> ◯ Important</label><label><input id="taskReady" type="checkbox"> ✓ Ready to act</label><label><input id="taskBox" type="checkbox"> □ Protect this time</label><label><input id="taskStar" type="checkbox"> ★ Today focus</label></div>
@@ -224,9 +224,11 @@
     <span class="install-nudge-icon">L</span><div><small>KEEP IT WITH YOU</small><b id="installNudgeTitle">Install Life Command Center</b><p id="installNudgeText">Open it like an app from your desktop or home screen.</p><button id="installNudgeAction" type="button">Install app →</button></div>
   </aside>
   <aside class="glance-popup" id="glancePopup" aria-live="polite" aria-hidden="true"><button class="glance-popup-close" data-glance-popup-close aria-label="Close">×</button><small id="glancePopupType">FROM YOUR BOARD</small><b id="glancePopupText"></b><button class="glance-popup-open" data-view="board">Open board →</button></aside>
-  <div class="toast" id="toast"><span>✓</span><div><b id="toastTitle">Saved</b><small id="toastText">Your change is ready.</small></div></div>
+  <aside class="connection-bar" id="connectionBar" aria-live="polite" hidden><i></i><div><b id="connectionTitle">Working offline</b><span id="connectionText">Changes remain safe in this browser and will retry.</span></div></aside>
+  <aside class="update-nudge" id="updateNudge" aria-live="polite" hidden><span>↻</span><div><b>A fresher version is ready</b><small>Restart to load interface improvements. Your saved work is safe.</small></div><button id="applyUpdate" type="button">Restart</button><button id="dismissUpdate" class="bare" type="button" aria-label="Dismiss update">×</button></aside>
+  <div class="toast" id="toast" role="status" aria-live="polite"><span>✓</span><div><b id="toastTitle">Saved</b><small id="toastText">Your change is ready.</small></div><button id="toastAction" type="button" hidden>Undo</button></div>
   <div class="xp-burst" id="xpBurst"><span>✦</span><b id="xpBurstValue">+10 XP</b><small id="xpBurstText">Momentum earned</small></div>
-  <script src="app.js?v=workspace-v4"></script>
-  <script type="module" src="scene.js?v=workspace-v4"></script>
+  <script src="app.js?v=workspace-v5"></script>
+  <script type="module" src="scene.js?v=workspace-v5"></script>
 </body>
 </html>
