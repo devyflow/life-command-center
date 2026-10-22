@@ -13,14 +13,15 @@ let state={
   ],
   availability:[],share:{token:'local-example',oneTime:true,expires:true,approval:true,questions:true,privacy:true}
 };
-const files=new Map([['/','index.html'],...['app.js','scene.js','styles.css','manifest.webmanifest','sw.js','icon-192.png','icon-512.png'].map(file=>['/'+file,file])]);
+const files=new Map([['/','index.html'],['/lock.html','lock.html'],...['app.js','scene.js','styles.css','manifest.webmanifest','sw.js','icon-192.png','icon-512.png'].map(file=>['/'+file,file])]);
 const types={html:'text/html',js:'application/javascript',css:'text/css',webmanifest:'application/manifest+json',png:'image/png'};
 const server=createServer(async(req,res)=>{
   const path=new URL(req.url,'http://localhost').pathname;
   res.setHeader('cache-control','no-store');
   const json=(body,status=200)=>{res.writeHead(status,{'content-type':'application/json'});res.end(JSON.stringify(body));};
   try{
-    if(path==='/api/session')return json({user:{name:'Isolated QA workspace'}});
+    if(path==='/api/session')return json({user:{id:'owner',accessId:'owner',name:'Isolated QA owner',displayName:'Isolated QA owner',role:'owner',workspaceId:'owner',ownerAccess:true},workspace:{id:'owner',name:'Isolated QA workspace',isOwn:true},viewingAsOwner:false});
+    if(path==='/api/accounts')return json({current:{id:'owner',accessId:'owner',displayName:'Isolated QA owner',role:'owner',status:'active',workspaceId:'owner',ownerAccess:true},workspace:{id:'owner',name:'Isolated QA workspace',isOwn:true},testers:[]});
     if(path==='/api/state'){
       if(req.method==='PUT'){
         let raw='';for await(const chunk of req)raw+=chunk;
@@ -32,7 +33,7 @@ const server=createServer(async(req,res)=>{
     }
     if(req.method!=='GET'||!files.has(path))return json({error:'Not found'},404);
     const file=files.get(path);let content=await readFile(new URL('../client/'+file,import.meta.url));
-    if(file==='index.html')content=Buffer.from(content.toString().replaceAll('workspace-v7',`qa-${Date.now()}`));
+    if(file==='index.html')content=Buffer.from(content.toString().replaceAll('workspace-v8',`qa-${Date.now()}`));
     res.writeHead(200,{'content-type':types[file.split('.').at(-1)]||'application/octet-stream'});res.end(content);
   }catch{json({error:'Local QA request failed'},500);}
 });

@@ -20,27 +20,38 @@ export function readCookie(request, name) {
   return null;
 }
 
-function signature(expires, secret) {
-  return createHmac("sha256", secret).update(String(expires)).digest("base64url");
+function signature(value, secret) {
+  return createHmac("sha256", secret).update(String(value)).digest("base64url");
 }
 
-export function createSession(secret, lifetimeSeconds = SESSION_SECONDS) {
+export function createSession(secret, lifetimeSeconds = SESSION_SECONDS, claims = null) {
   const expires = Math.floor(Date.now() / 1000) + lifetimeSeconds;
-  return `${expires}.${signature(expires, secret)}`;
+  if (!claims) return `${expires}.${signature(expires, secret)}`;
+  const payload = Buffer.from(JSON.stringify({ ...claims, exp:expires }), "utf8").toString("base64url");
+  const value = `v2.${payload}`;
+  return `${value}.${signature(value, secret)}`;
 }
 
 export function sessionDetails(request, secret = process.env.ACCESS_SECRET) {
   if (!secret) return false;
   const token = readCookie(request, ACCESS_COOKIE);
   if (!token) return false;
-  const [expiresText, supplied] = token.split(".");
+  const parts = token.split(".");
+  let expiresText, supplied, signedValue, claims = null;
+  if (parts.length === 3 && parts[0] === "v2") {
+    signedValue = `${parts[0]}.${parts[1]}`; supplied = parts[2];
+    try { claims = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8")); } catch { return false; }
+    expiresText = claims?.exp;
+  } else {
+    [expiresText, supplied] = parts; signedValue = expiresText;
+  }
   const expires = Number(expiresText);
   const now = Math.floor(Date.now() / 1000);
   if (!Number.isFinite(expires) || expires <= now || !supplied) return false;
-  const expected = signature(expiresText, secret);
+  const expected = signature(signedValue, secret);
   const left = Buffer.from(supplied), right = Buffer.from(expected);
   if (left.length !== right.length || !timingSafeEqual(left, right)) return false;
-  return { token, expires, remembered:expires-now>SESSION_SECONDS };
+  return { token, expires, remembered:expires-now>SESSION_SECONDS, claims, legacy:!claims };
 }
 
 export function validSession(request, secret = process.env.ACCESS_SECRET) { return Boolean(sessionDetails(request, secret)); }

@@ -11,6 +11,6 @@ export default function handler(request, response) {
   response.statusCode = 200;
   response.setHeader("content-type", "text/html; charset=utf-8");
   response.setHeader("cache-control", "no-store");
-  if (session?.remembered) response.setHeader("set-cookie", sessionCookie(createSession(process.env.ACCESS_SECRET, REMEMBERED_SESSION_SECONDS), REMEMBERED_SESSION_SECONDS));
+  if (session?.remembered) response.setHeader("set-cookie", sessionCookie(createSession(process.env.ACCESS_SECRET, REMEMBERED_SESSION_SECONDS, session.claims), REMEMBERED_SESSION_SECONDS));
   response.end(session ? appPage : lockPage);
 }

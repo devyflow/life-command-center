@@ -10,7 +10,7 @@ assert.equal(typeof worker?.fetch, "function");
 const lockEnv = { ACCESS_SECRET:"PaperOrbit-test" };
 const locked = await worker.fetch(new Request("https://example.test/"), lockEnv, {});
 assert.equal(locked.status, 200);
-assert.match(await locked.text(), /Enter your secret word/);
+assert.match(await locked.text(), /Open your command center/);
 const unlock = await worker.fetch(new Request("https://example.test/api/unlock", { method:"POST", headers:{ origin:"https://example.test", "content-type":"application/json" }, body:JSON.stringify({ secret:"PaperOrbit-test" }) }), lockEnv, {});
 assert.equal(unlock.status, 200);
 const cookie = unlock.headers.get("set-cookie").split(";")[0];

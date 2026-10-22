@@ -14,11 +14,12 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&family=Newsreader:ital,opsz,wght@1,6..72,500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=workspace-v7">
+  <link rel="stylesheet" href="styles.css?v=workspace-v8">
 </head>
 <body>
   <div class="grain" aria-hidden="true"></div>
   <canvas id="lifeScene" aria-hidden="true"></canvas>
+  <aside class="workspace-banner" id="workspaceBanner" hidden><span>Owner view</span><b id="workspaceBannerName">Tester workspace</b><button type="button" id="returnOwnerWorkspace">Return to my workspace</button></aside>
   <aside class="sidebar" id="sidebar">
     <a class="brand" href="#" data-view="today" aria-label="Life Command Center home"><span class="brand-mark">L</span><span>Life<br>Command</span></a>
     <nav class="primary-nav" aria-label="Main navigation">
@@ -143,6 +144,19 @@
           <p>Rename your structure here. Existing tasks follow their renamed area or category automatically.</p>
           <div id="taxonomyEditor" class="taxonomy-editor"></div>
           <button class="primary taxonomy-save" type="button" id="saveTaxonomy">Save organization →</button>
+        </section>
+        <section class="settings-panel account-panel" id="accountPanel">
+          <div class="settings-panel-head"><div><p class="eyebrow">ACCOUNTS & TESTING</p><h3 id="accountPanelTitle">Your private workspace</h3></div><span class="account-role" id="accountRole">Loading…</span></div>
+          <p id="accountPanelCopy">Account information is loading securely.</p>
+          <div class="account-owner-tools" id="accountOwnerTools" hidden>
+            <form class="tester-invite-form" id="testerInviteForm"><input id="testerName" maxlength="60" required placeholder="Friend's name" aria-label="Friend's name"><button class="primary" type="submit">Create tester invite</button></form>
+            <div class="invite-result" id="inviteResult" hidden><span>One-time invitation · expires in 7 days</span><div><input id="inviteLink" readonly aria-label="Invitation link"><button class="secondary" id="copyInvite" type="button">Copy</button></div></div>
+            <div class="tester-list" id="testerList"></div>
+          </div>
+          <div class="account-tester-tools" id="accountTesterTools" hidden>
+            <div class="access-id-card"><span>Your Access ID</span><b id="testerAccessId"></b><small>Use this with your passphrase on another device.</small></div>
+            <label class="support-toggle"><input id="ownerAccessToggle" type="checkbox"><span><b>Owner support access</b><small>Allow the workspace owner to open this tester space when support is needed.</small></span></label>
+          </div>
         </section>
       </div>
     </div>

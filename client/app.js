@@ -57,9 +57,10 @@ const seed = {
   taxonomy: DEFAULT_TAXONOMY
 };
 
-const STORE = 'life-command-v3';
+const STORE_BASE = 'life-command-v4';
 const clone = obj => JSON.parse(JSON.stringify(obj));
-let state = (() => { try { return { ...clone(seed), ...JSON.parse(localStorage.getItem(STORE) || '{}') }; } catch { return clone(seed); } })();
+let activeStoreKey = null;
+let state = clone(seed);
 let ui = { view: 'today', space: null, category: null, planningDate: iso(), rescueId: null, timer: null, taskFilter: 'open', requestFilter: 'pending', plannerSelected: null, boardId: 'workstation', boardNoteId: null, boardMenuId: null, libraryId: null, libraryFilter: 'active', libraryQuery: '' };
 const CANVAS_VIEW_STORE='life-command-canvas-view-v1';
 let canvasView={paper:{locked:true,zoom:LIGHTWEIGHT_MODE?'fit':1},board:{locked:true,zoom:LIGHTWEIGHT_MODE?'fit':1}};
@@ -72,7 +73,7 @@ function setCanvasZoom(kind,action){if(!canvasView[kind])return;const current=ca
 function setCanvasLock(kind){if(!canvasView[kind])return;const unlocking=canvasView[kind].locked;if(unlocking){canvasView.paper.locked=true;canvasView.board.locked=true;}canvasView[kind].locked=!unlocking;paperRuntime.drag=null;bulletinRuntime.drag=null;render();toast(canvasView[kind].locked?`${kind==='paper'?'Paper':'Board'} locked`:`${kind==='paper'?'Paper':'Board'} editing on`,canvasView[kind].locked?'Scroll and zoom safely. Nothing can move by accident.':'Drag and layout controls are active until you leave this space or lock it again.');}
 function requireCanvasEditing(kind){if(!canvasView[kind]?.locked)return true;toast(`${kind==='paper'?'Paper':'Board'} is locked`,'Tap the Locked control before changing its layout.');return false;}
 let timerHandle = null;
-let sync = { ready: false, revision: 0, dirty: false, saving: false, timer: null, user: null };
+let sync = { ready: false, revision: 0, dirty: false, saving: false, timer: null, user: null, workspace: null, viewingAsOwner: false, account: null };
 let taxonomyDraft = null;
 let installPrompt = null;
 let toastTimer = null;
@@ -121,7 +122,8 @@ function setSyncStatus(text, mode = '') {
   else if(mode==='saving'&&navigator.onLine===false){bar.hidden=false;}
   else bar.hidden=true;
 }
-function saveLocal() { localStorage.setItem(STORE, JSON.stringify(state)); }
+function saveLocal() { if(activeStoreKey)localStorage.setItem(activeStoreKey, JSON.stringify(state)); }
+function clearWorkspaceCaches(){try{Object.keys(localStorage).filter(key=>key.startsWith(`${STORE_BASE}:`)||key==='life-command-v3').forEach(key=>localStorage.removeItem(key));}catch{}}
 function save() {
   state.meta = { ...(state.meta || {}), updatedAt: new Date().toISOString() };
   saveLocal();
@@ -154,13 +156,14 @@ async function pullCloudState() {
 }
 async function initializeCloud() {
   try {
-    const [sessionResponse,stateResponse] = await Promise.all([fetch('/api/session',{cache:'no-store'}),fetch('/api/state',{cache:'no-store'})]);
-    if (!sessionResponse.ok || !stateResponse.ok) throw new Error('Authentication unavailable');
-    const session = await sessionResponse.json(), remote = await stateResponse.json();
-    sync.user = session.user; sync.revision = remote.revision || 0;
-    $('#accountName').textContent = session.user.name || session.user.email || 'Your command center';
+    const sessionResponse=await fetch('/api/session',{cache:'no-store'});if(sessionResponse.status===401){location.replace('/');return;}if(!sessionResponse.ok)throw new Error('Authentication unavailable');
+    const session=await sessionResponse.json();sync.user=session.user;sync.workspace=session.workspace;sync.viewingAsOwner=Boolean(session.viewingAsOwner);activeStoreKey=`${STORE_BASE}:${session.workspace.id}`;
+    const stateResponse=await fetch('/api/state',{cache:'no-store'});if(!stateResponse.ok)throw new Error('Workspace unavailable');const remote=await stateResponse.json();sync.revision=remote.revision||0;
+    $('#accountName').textContent = session.workspace?.name || session.user.name || 'Your command center';
     $('#accountAvatar').textContent = (session.user.name || session.user.email || 'A').trim().charAt(0).toUpperCase();
-    if (remote.state) { state = remote.state; normalizeStateShape(); saveLocal(); render(); updateReminderUI(); }
+    const banner=$('#workspaceBanner');banner.hidden=!sync.viewingAsOwner;if(sync.viewingAsOwner)$('#workspaceBannerName').textContent=session.workspace.name;
+    if(remote.state)state=remote.state;else{try{state=JSON.parse(localStorage.getItem(activeStoreKey)||'null')||clone(seed);}catch{state=clone(seed);}}
+    normalizeStateShape();saveLocal();render();updateReminderUI();
     sync.ready = true; setSyncStatus('Cloud synced','synced');
     if (!remote.state) { sync.dirty = true; await pushCloudState(); }
     setInterval(pullCloudState, 15000);
@@ -209,8 +212,31 @@ function openSettings(){
   taxonomyDraft=taxonomyDraftFromState();renderTaxonomyEditor();
   $('#settingsSync').textContent=$('#syncStatus').textContent||'Cloud status unavailable';
   $('#settingsUpdated').textContent=state.meta?.updatedAt?new Date(state.meta.updatedAt).toLocaleString():'No changes yet';
-  $('#reminderLead').value=String(state.preferences.reminderLead||10);updateAccentControl();updateCompletedHistoryControl();updateMotivationControl();openModal('settingsModal');
+  $('#reminderLead').value=String(state.preferences.reminderLead||10);updateAccentControl();updateCompletedHistoryControl();updateMotivationControl();renderAccountPanel();openModal('settingsModal');
 }
+function inviteUrl(token){return `${location.origin}/?invite=${encodeURIComponent(token)}`;}
+function showInviteLink(token,label='One-time invitation · expires in 7 days'){
+  const box=$('#inviteResult');box.hidden=false;box.querySelector('span').textContent=label;$('#inviteLink').value=inviteUrl(token);$('#inviteLink').focus();$('#inviteLink').select();
+}
+async function accountRequest(action,payload={}){
+  const response=await fetch('/api/accounts',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({action,...payload})}),result=await response.json().catch(()=>({}));
+  if(!response.ok)throw new Error(result.error||'Account action failed');return result;
+}
+async function renderAccountPanel(){
+  const title=$('#accountPanelTitle'),copy=$('#accountPanelCopy'),role=$('#accountRole'),ownerTools=$('#accountOwnerTools'),testerTools=$('#accountTesterTools');
+  try{
+    const response=await fetch('/api/accounts',{cache:'no-store'});if(!response.ok)throw new Error('Account details unavailable');const payload=await response.json();sync.account=payload;
+    const current=payload.current;title.textContent=payload.workspace.isOwn?payload.workspace.name:`Viewing ${payload.workspace.name}`;role.textContent=current.role;ownerTools.hidden=current.role!=='owner';testerTools.hidden=current.role!=='tester';
+    if(current.role==='owner'){
+      copy.textContent='Create a separate tester workspace, reset access, or open a tester space when support access is enabled.';
+      $('#testerList').innerHTML=(payload.testers||[]).map(tester=>`<article class="tester-row"><div><b>${esc(tester.displayName)}</b><small>${esc(tester.accessId)} · ${tester.status}${tester.ownerAccess?' · support access on':' · support access off'}</small></div><div class="tester-actions">${tester.status==='active'&&tester.ownerAccess?`<button type="button" data-tester-open="${tester.workspaceId}">Open workspace</button>`:''}<button type="button" data-tester-reset="${tester.id}">Reset link</button><button type="button" data-tester-status="${tester.id}" data-next-status="${tester.status==='active'?'disable':'enable'}">${tester.status==='active'?'Disable':'Enable'}</button><button class="danger" type="button" data-tester-delete="${tester.id}">Delete</button></div></article>`).join('')||'<div class="empty"><b>No tester accounts yet.</b>Create a one-time invitation for your friend.</div>';
+    }else{
+      copy.textContent='Your tasks and boards belong only to this tester workspace.';$('#testerAccessId').textContent=current.accessId;$('#ownerAccessToggle').checked=Boolean(current.ownerAccess);
+    }
+  }catch(error){title.textContent='Account unavailable';copy.textContent=error.message;role.textContent='offline';ownerTools.hidden=true;testerTools.hidden=true;}
+}
+async function switchWorkspace(workspaceId){try{await accountRequest('switch_workspace',{workspaceId});location.replace('/');}catch(error){toast('Workspace could not open',error.message);}}
+async function returnOwnerWorkspace(){try{await accountRequest('return_owner');location.replace('/');}catch(error){toast('Could not return',error.message);}}
 function saveTaxonomy(){
   const clean=taxonomyDraft.map(area=>({name:area.name.trim(),color:area.color,categories:area.categories.map(c=>c.name.trim()).filter(Boolean)}));
   if(clean.some(area=>!area.name||!area.categories.length)){toast('Each area needs a name and category','Add at least one category before saving.');return;}
@@ -372,6 +398,7 @@ function setFocusMode(enabled,{announce=true}={}) {
 }
 function toggleFocusMode(){setFocusMode(!document.body.classList.contains('focus-mode'));}
 function openModal(id) {
+  hideInstallNudge();
   modalReturnFocus=document.activeElement;
   $$('.modal-layer.open').forEach(layer=>{layer.classList.remove('open');layer.setAttribute('aria-hidden','true');});
   $('#sidebar').classList.remove('open');$('#menuBtn').setAttribute('aria-expanded','false');$('#mobileMore')?.setAttribute('aria-expanded','false');
@@ -1108,7 +1135,17 @@ $('#focusExit').addEventListener('pointerdown',event=>{event.preventDefault();se
 $('#accentChoice').addEventListener('click',event=>{const choice=event.target.closest('[data-accent]');if(choice)applyAccent(choice.dataset.accent,{announce:true});});
 $('#settingsBtn').addEventListener('click',openSettings);
 $('#reminderBtn').addEventListener('click',toggleReminders);
-$('#lockWorkspace').addEventListener('click',async()=>{try{await fetch('/api/logout',{method:'POST'});}finally{location.replace('/');}});
+$('#lockWorkspace').addEventListener('click',async()=>{try{await fetch('/api/logout',{method:'POST'});}finally{clearWorkspaceCaches();location.replace('/');}});
+$('#returnOwnerWorkspace').addEventListener('click',returnOwnerWorkspace);
+$('#testerInviteForm').addEventListener('submit',async event=>{event.preventDefault();const button=event.submitter,name=$('#testerName').value.trim();if(!name)return;button.disabled=true;try{const result=await accountRequest('create_invite',{displayName:name});showInviteLink(result.token);$('#testerName').value='';toast('Tester invitation ready','The link works once and expires in seven days.');}catch(error){toast('Invitation could not be created',error.message);}finally{button.disabled=false;}});
+$('#copyInvite').addEventListener('click',async()=>{try{await navigator.clipboard.writeText($('#inviteLink').value);toast('Invitation copied','Send it privately to your tester.');}catch{$('#inviteLink').select();toast('Link selected','Copy the selected invitation link.');}});
+$('#ownerAccessToggle').addEventListener('change',async event=>{const allowed=event.target.checked;event.target.disabled=true;try{await accountRequest('owner_access',{allowed});sync.account.current.ownerAccess=allowed;toast(allowed?'Owner support access enabled':'Owner support access disabled');}catch(error){event.target.checked=!allowed;toast('Access setting was not changed',error.message);}finally{event.target.disabled=false;}});
+$('#testerList').addEventListener('click',async event=>{
+  const open=event.target.closest('[data-tester-open]');if(open){switchWorkspace(open.dataset.testerOpen);return;}
+  const reset=event.target.closest('[data-tester-reset]');if(reset){try{const result=await accountRequest('reset_link',{accountId:reset.dataset.testerReset});showInviteLink(result.token,'One-time passphrase reset · expires in 7 days');toast('Reset link ready');}catch(error){toast('Reset link could not be created',error.message);}return;}
+  const status=event.target.closest('[data-tester-status]');if(status){try{await accountRequest(status.dataset.nextStatus,{accountId:status.dataset.testerStatus});await renderAccountPanel();toast(status.dataset.nextStatus==='disable'?'Tester disabled':'Tester enabled');}catch(error){toast('Tester was not changed',error.message);}return;}
+  const remove=event.target.closest('[data-tester-delete]');if(remove){if(!confirm('Delete this tester account and its entire workspace? This cannot be undone.'))return;try{await accountRequest('delete',{accountId:remove.dataset.testerDelete});await renderAccountPanel();toast('Tester workspace deleted');}catch(error){toast('Tester was not deleted',error.message);}}
+});
 $('#scanCamera').addEventListener('change',event=>{acceptScanFile(event.target.files?.[0]);event.target.value='';});
 $('#scanUpload').addEventListener('change',event=>{acceptScanFile(event.target.files?.[0]);event.target.value='';});
 $('#scanRetry').addEventListener('click',recognizeScan);$('#scanImport').addEventListener('click',importScanToPaper);
