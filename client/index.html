@@ -81,6 +81,15 @@
       <header class="modal-head"><div><p class="eyebrow">QUICK CAPTURE</p><h2 id="taskModalTitle">Give it a place.</h2></div><button data-close="taskModal">×</button></header>
       <form id="taskForm">
         <label class="title-field"><span>What needs your attention?</span><textarea id="taskTitle" rows="2" required placeholder="Prepare DSA practice set"></textarea></label>
+        <details class="capture-source" id="taskSourcePanel">
+          <summary><span>✦ Suggest tasks from a photo or link</span><small>Review suggestions before anything is added</small></summary>
+          <div class="capture-source-body">
+            <div class="capture-source-inputs"><label class="secondary">Upload photo<input id="taskSourceImage" type="file" accept="image/png,image/jpeg,image/webp,image/heic,image/heif" hidden></label><span>or</span><input id="taskSourceUrl" type="url" placeholder="Paste an article, tool, post or website link"><button class="secondary" id="taskSourceAnalyze" type="button">Find useful actions</button></div>
+            <div class="capture-source-status" id="taskSourceStatus">Choose a photo or enter a link. The source stays separate until you approve a suggestion.</div>
+            <div class="capture-source-suggestions" id="taskSourceSuggestions"></div>
+            <button class="bare-link capture-knowledge-save" id="taskSourceSaveKnowledge" type="button" hidden>+ Keep this source in Useful Library</button>
+          </div>
+        </details>
         <div class="form-grid">
           <label>Life area<select id="taskArea"><option>Career</option><option>Personal</option><option>Growth</option></select></label>
           <label>Category<select id="taskCategory"><option>College</option><option>DSA</option><option>Meetings</option><option>Projects</option></select></label>
@@ -175,7 +184,7 @@
       <div class="scan-intro"><p>Photograph a handwritten or printed page, or upload a screenshot. Recognition happens in this browser; the source image is not saved to your account.</p><span>English text works best · the first scan downloads the recognition engine</span></div>
       <div class="scan-layout">
         <section class="scan-source-panel">
-          <div class="scan-preview-frame" id="scanPreviewFrame"><div id="scanPlaceholder"><b>▧</b><strong>No page selected</strong><small>Use a clear, straight image with good light.</small></div><img id="scanPreview" alt="Selected page preview" hidden></div>
+          <div class="scan-preview-frame" id="scanPreviewFrame"><div id="scanPlaceholder"><b>▧</b><strong>No page selected</strong><small>Use a clear, straight image with good light.</small></div><img id="scanPreview" alt="Selected page preview" hidden><div class="scan-region-overlay" id="scanRegionOverlay" hidden></div><span class="scan-page-badge" id="scanPageBadge" hidden></span></div>
           <div class="scan-source-actions">
             <label class="primary scan-file-button">Take photo<input id="scanCamera" type="file" accept="image/*" capture="environment" hidden></label>
             <label class="secondary scan-file-button">Upload image<input id="scanUpload" type="file" accept="image/png,image/jpeg,image/webp,image/heic,image/heif" hidden></label>
@@ -184,6 +193,7 @@
             <label>Page type<select id="scanMode"><option value="auto">Auto enhance</option><option value="handwriting">Handwriting</option><option value="printed">Clean printed text</option></select></label>
             <label>Language<select id="scanLanguage"><option value="eng">English</option><option value="hin">Hindi</option><option value="eng+hin">English + Hindi</option></select></label>
           </div>
+          <div class="scan-page-tools"><button class="ghost-btn" id="scanRotate" type="button">↻ Rotate page</button><span>Tap a detected text box in the preview to include or exclude it.</span></div>
           <p class="scan-quality-tip" id="scanQualityTip">Auto enhance corrects lighting and tries two reading styles. Choose Handwriting for notes written with a pen.</p>
           <div class="scan-progress" id="scanProgress" hidden><i id="scanProgressBar"></i></div>
           <div class="scan-status" id="scanStatus" data-state="idle"><b>Ready when you are.</b><span>Nothing leaves this browser until you add the detected items.</span></div>
@@ -253,7 +263,7 @@
   <aside class="update-nudge" id="updateNudge" aria-live="polite" hidden><span>↻</span><div><b>A fresher version is ready</b><small>Restart to load interface improvements. Your saved work is safe.</small></div><button id="applyUpdate" type="button">Restart</button><button id="dismissUpdate" class="bare" type="button" aria-label="Dismiss update">×</button></aside>
   <div class="toast" id="toast" role="status" aria-live="polite"><span>✓</span><div><b id="toastTitle">Saved</b><small id="toastText">Your change is ready.</small></div><button id="toastAction" type="button" hidden>Undo</button></div>
   <div class="xp-burst" id="xpBurst"><span>✦</span><b id="xpBurstValue">+10 XP</b><small id="xpBurstText">Momentum earned</small></div>
-  <script src="app.js?v=workspace-v7"></script>
+  <script src="app.js?v=workspace-v8"></script>
   <script type="module" src="scene.js?v=workspace-v7"></script>
 </body>
 </html>

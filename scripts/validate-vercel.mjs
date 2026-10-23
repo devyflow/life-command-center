@@ -3,6 +3,7 @@ import { EventEmitter } from "node:events";
 import { access, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import accounts from "../api/accounts.mjs";
+import captureSource from "../api/capture-source.mjs";
 import page from "../api/page.mjs";
 import session from "../api/session.mjs";
 import stateHandler from "../api/state.mjs";
@@ -19,6 +20,7 @@ global.fetch = async (input, options={}) => {
     upstream={state:body.state,revision:upstream.revision+1,updatedAt:new Date().toISOString()};return new Response(JSON.stringify({ok:true,revision:upstream.revision,updatedAt:upstream.updatedAt}),{status:200,headers:{"content-type":"application/json"}});
   }
   if(url.endsWith("/api/state"))return new Response(JSON.stringify(upstream),{status:200,headers:{"content-type":"application/json"}});
+  if(url.startsWith("https://93.184.216.34/"))return new Response('<html><head><title>Graph Practice Guide</title><meta name="description" content="A practical tutorial for learning graph algorithms"></head><body><h1>Graph Practice Guide</h1><p>Practice two graph problems and review the solutions.</p><li>Build a reusable BFS template</li></body></html>',{status:200,headers:{"content-type":"text/html"}});
   throw new Error("Unexpected fetch "+url);
 };
 
@@ -36,6 +38,9 @@ assert.match(unlocked.headers["set-cookie"],/Max-Age=31536000/);assert.match(unl
 const ownerCookie=unlocked.headers["set-cookie"].split(";")[0];
 const authorized=response();await session(request("GET",{cookie:ownerCookie}),authorized);assert.equal(authorized.statusCode,200);assert.equal(json(authorized).user.role,"owner");assert.match(authorized.headers["set-cookie"],/Max-Age=31536000/);
 const ownerState=response();await stateHandler(request("GET",{cookie:ownerCookie}),ownerState);assert.equal(json(ownerState).state.tasks[0].title,"Owner task");
+const sourcePreview=response();await captureSource(postWithCookie(ownerCookie,{url:"https://93.184.216.34/guide"}),sourcePreview);assert.equal(sourcePreview.statusCode,200);assert.equal(json(sourcePreview).source.title,"Graph Practice Guide");assert.match(json(sourcePreview).source.text,/Practice two graph problems/);
+const privateSource=response();await captureSource(postWithCookie(ownerCookie,{url:"http://127.0.0.1/private"}),privateSource);assert.equal(privateSource.statusCode,400);
+const privateIpv6=response();await captureSource(postWithCookie(ownerCookie,{url:"http://[::1]/private"}),privateIpv6);assert.equal(privateIpv6.statusCode,400);
 
 const invite=response();await accounts(postWithCookie(ownerCookie,{action:"create_invite",displayName:"Test Friend"}),invite);assert.equal(invite.statusCode,200);const inviteToken=json(invite).token;assert.ok(inviteToken);
 const activated=response();await unlock(post({inviteToken,displayName:"Test Friend",password:"river-calm-focus-2048",ownerAccess:true,stayLoggedIn:true}),activated);assert.equal(activated.statusCode,200);const activationBody=json(activated),testerAccessId=activationBody.account.accessId,testerCookie=activated.headers["set-cookie"].split(";")[0];assert.notEqual(testerAccessId,"owner");assert.equal(activationBody.recoveryCodes.length,8);
@@ -60,6 +65,6 @@ const reusedCode=response();await unlock(post({recover:true,accessId:"owner",rec
 
 const app=response();page(request("GET",{cookie:ownerCookie}),app);assert.match(app.body,/Life Command Center/);assert.match(app.body,/accountPanel/);assert.match(app.body,/workspaceBanner/);
 const appSource=await readFile(resolve(import.meta.dirname,"../client/app.js"),"utf8");
-for(const pattern of [/data-planner-time/,/exportBackup/,/prepareScanVariants/,/paperSafePosition/,/initBulletinBoard/,/openSharedLibraryCapture/,/renderAccountPanel/,/switchWorkspace/,/STORE_BASE/])assert.match(appSource,pattern);
+for(const pattern of [/data-planner-time/,/exportBackup/,/prepareScanVariants/,/detectPageBounds/,/scanCandidatesFromResults/,/analyzeCaptureLink/,/buildSourceSuggestions/,/saveCaptureSourceToKnowledge/,/paperSafePosition/,/initBulletinBoard/,/openSharedLibraryCapture/,/renderAccountPanel/,/switchWorkspace/,/STORE_BASE/])assert.match(appSource,pattern);
 for(const file of ["manifest.webmanifest","sw.js","icon-192.png","icon-512.png"])await access(resolve(import.meta.dirname,"../client",file));
 console.log("Account isolation, invitations, owner support access, persistent sessions, cloud migration, app shell, planner, Paper, bulletin board, library, scanner, backups, and PWA validated");

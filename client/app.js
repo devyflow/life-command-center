@@ -645,7 +645,7 @@ function boardView(){
 const KNOWLEDGE_STOP=new Set(['the','and','for','with','this','that','from','into','your','you','are','was','were','have','has','will','about','task','work','using','use']);
 function knowledgeWords(value){return String(value||'').toLowerCase().normalize('NFKD').replace(/[^a-z0-9\s-]/g,' ').split(/[\s-]+/).map(word=>word.length>5&&word.endsWith('ing')?word.slice(0,-3):word.length>4&&word.endsWith('ed')?word.slice(0,-2):word.length>4&&word.endsWith('s')?word.slice(0,-1):word).filter(word=>word.length>2&&!KNOWLEDGE_STOP.has(word));}
 function knowledgeScore(task,item){
-  const taskCore=new Set(knowledgeWords([task.title,task.next,task.category].join(' '))),taskArea=new Set(knowledgeWords(task.area)),itemCore=new Set(knowledgeWords([item.title,item.context,(item.tags||[]).join(' ')].join(' '))),itemDetail=new Set(knowledgeWords([item.why,item.note,item.type].join(' ')));
+  const taskCore=new Set(knowledgeWords([task.title,task.next,task.category,task.sourceCapture?.title,task.sourceCapture?.description].join(' '))),taskArea=new Set(knowledgeWords(task.area)),itemCore=new Set(knowledgeWords([item.title,item.context,(item.tags||[]).join(' ')].join(' '))),itemDetail=new Set(knowledgeWords([item.why,item.note,item.type].join(' ')));
   const strong=[...taskCore].filter(word=>itemCore.has(word)),support=[...taskCore].filter(word=>itemDetail.has(word)),area=[...taskArea].filter(word=>itemCore.has(word));const score=strong.length*3+support.length+area.length;
   return {score,reason:strong.length?`Matches ${strong.slice(0,2).join(' + ')}`:area.length?`Fits ${task.area}`:support.length?`Related to ${support[0]}`:''};
 }
@@ -787,7 +787,7 @@ function updateTaskPlanFields() {
 }
 function openTaskEditor(task = null) {
   ui.editTaskId = task?.id || null;
-  const form = $('#taskForm'); form.reset();
+  const form = $('#taskForm'); form.reset();resetCaptureSource();
   $('#taskModalTitle').textContent = task ? 'Edit the commitment.' : 'Give it a place.';
   $('#taskSubmit').textContent = task ? 'Save changes →' : 'Capture task →';
   $('#taskDelete').hidden = !task;
@@ -800,6 +800,7 @@ function openTaskEditor(task = null) {
   $('#taskTimer').checked = task ? Boolean(task.timer) : true; $('#taskPublish').checked = Boolean(task?.publish); $('#taskCalendar').checked = Boolean(task?.calendar);
   $('#taskCircle').checked = hasMark(task || {},'circle'); $('#taskReady').checked = hasMark(task || {},'tick'); $('#taskBox').checked = hasMark(task || {},'box'); $('#taskStar').checked = hasMark(task || {},'star');
   updateTaskPlanFields();
+  if(task?.sourceCapture){captureSourceRuntime={...captureSourceRuntime,...task.sourceCapture,libraryId:task.sourceLibraryId||null,suggestions:[]};$('#taskSourcePanel').open=true;$('#taskSourceStatus').textContent=`Source: ${task.sourceCapture.title||task.sourceCapture.url||'captured item'}. You can keep it in the Library or analyze another source.`;renderCaptureSource();}
   const knowledge=task?knowledgeSuggestions(task,2):[],knowledgePanel=$('#taskKnowledge');knowledgePanel.hidden=!knowledge.length;$('#taskKnowledgeItems').innerHTML=knowledge.map(match=>`<article><div><small>${esc(match.reason)}</small><b>${esc(match.item.title)}</b></div><button type="button" data-knowledge-attach="${match.item.id}:${task.id}">${match.item.taskId===task.id?'Attached':'Attach'}</button><button type="button" data-knowledge-open="${match.item.id}">Open</button></article>`).join('');
   openModal('taskModal'); setTimeout(()=>$('#taskTitle').focus(),80);
 }
@@ -818,7 +819,8 @@ function showGlancePopup(note){
 }
 
 const OCR_SCRIPT = 'https://cdn.jsdelivr.net/npm/tesseract.js@6.0.1/dist/tesseract.min.js';
-let scanRuntime = { file:null, previewUrl:null, candidates:[], running:false, worker:null, libraryPromise:null, confidence:null, pass:null };
+let scanRuntime = { file:null, previewUrl:null, candidates:[], regions:[], running:false, worker:null, libraryPromise:null, confidence:null, pass:null, rotation:0, pageDetected:false };
+let captureSourceRuntime={kind:null,file:null,url:'',title:'',description:'',text:'',siteName:'',suggestions:[],libraryId:null,running:false};
 
 function setScanStatus(title, detail = '', mode = 'idle') {
   const status=$('#scanStatus'); if(!status)return; status.dataset.state=mode;
@@ -832,7 +834,7 @@ function updateScanSelection() {
 }
 function renderScanCandidates() {
   const root=$('#scanCandidates'); if(!root)return;
-  if(!scanRuntime.candidates.length){root.innerHTML='<div class="scan-empty"><b>1</b><span>Choose a photo or screenshot.</span><b>2</b><span>Correct the detected lines.</span><b>3</b><span>Add them to your Paper page.</span></div>';$('#scanReviewTitle').textContent='Your editable review will appear here.';updateScanSelection();return;}
+  if(!scanRuntime.candidates.length){root.innerHTML='<div class="scan-empty"><b>1</b><span>Choose a photo or screenshot.</span><b>2</b><span>Correct the detected lines.</span><b>3</b><span>Add them to your Paper page.</span></div>';$('#scanReviewTitle').textContent='Your editable review will appear here.';renderScanRegions();updateScanSelection();return;}
   $('#scanReviewTitle').textContent=`Review ${scanRuntime.candidates.length} detected line${scanRuntime.candidates.length===1?'':'s'}.`;
   root.innerHTML=scanRuntime.candidates.map(item=>`<div class="scan-candidate ${item.included?'':'excluded'}" data-scan-candidate="${item.id}">
     <label class="scan-include" title="Include on Paper"><input type="checkbox" data-scan-include="${item.id}" ${item.included?'checked':''}><span>✓</span></label>
@@ -841,7 +843,17 @@ function renderScanCandidates() {
     <label class="scan-important" title="Mark important"><input type="checkbox" data-scan-important="${item.id}" ${item.important?'checked':''}><span>◯</span></label>
     ${item.completed?'<small class="scan-done-badge">DONE</small>':''}
   </div>`).join('');
-  updateScanSelection();
+  renderScanRegions();updateScanSelection();
+}
+function renderScanRegions(){
+  const root=$('#scanRegionOverlay'),image=$('#scanPreview'),frame=$('#scanPreviewFrame');if(!root||!image||!frame)return;
+  const regions=scanRuntime.candidates.filter(item=>item.bbox);root.hidden=!regions.length;
+  if(!regions.length){root.innerHTML='';return;}
+  const naturalWidth=image.naturalWidth||frame.clientWidth,naturalHeight=image.naturalHeight||frame.clientHeight;
+  const scale=Math.min(frame.clientWidth/naturalWidth,frame.clientHeight/naturalHeight);
+  const width=naturalWidth*scale,height=naturalHeight*scale;
+  root.style.left=`${(frame.clientWidth-width)/2}px`;root.style.top=`${(frame.clientHeight-height)/2}px`;root.style.width=`${width}px`;root.style.height=`${height}px`;
+  root.innerHTML=regions.map(item=>`<button type="button" class="scan-region ${item.included?'included':'excluded'}" data-scan-region="${item.id}" style="left:${item.bbox.left}%;top:${item.bbox.top}%;width:${item.bbox.width}%;height:${item.bbox.height}%" title="${item.included?'Included':'Excluded'}: ${esc(item.text)}"></button>`).join('');
 }
 function parseScanText(raw) {
   const seen=new Set();
@@ -874,13 +886,17 @@ async function decodeScanImage(file) {
   try{await new Promise((resolve,reject)=>{image.onload=resolve;image.onerror=()=>reject(new Error('This image could not be opened. Try JPG, PNG or WebP.'));image.src=url;});return image;}finally{URL.revokeObjectURL(url);}
 }
 function scanCanvas(width,height){const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;return canvas;}
-async function prepareScanVariants(file,mode='auto') {
+function rotateScanSource(source,turns=0){const sw=source.naturalWidth||source.width,sh=source.naturalHeight||source.height,sideways=turns%2===1,canvas=scanCanvas(sideways?sh:sw,sideways?sw:sh),context=canvas.getContext('2d');context.translate(canvas.width/2,canvas.height/2);context.rotate(turns*Math.PI/2);context.drawImage(source,-sw/2,-sh/2);return canvas;}
+function detectPageBounds(canvas){
+  const max=520,scale=Math.min(1,max/Math.max(canvas.width,canvas.height)),w=Math.max(40,Math.round(canvas.width*scale)),h=Math.max(40,Math.round(canvas.height*scale)),probe=scanCanvas(w,h),ctx=probe.getContext('2d',{willReadFrequently:true});ctx.drawImage(canvas,0,0,w,h);const data=ctx.getImageData(0,0,w,h).data,lum=(x,y)=>{const i=(y*w+x)*4;return .2126*data[i]+.7152*data[i+1]+.0722*data[i+2];};let edge=[];for(let x=0;x<w;x+=4){edge.push(lum(x,1),lum(x,h-2));}for(let y=0;y<h;y+=4){edge.push(lum(1,y),lum(w-2,y));}edge.sort((a,b)=>a-b);const background=edge[Math.floor(edge.length/2)]||240,brightPage=background<165,threshold=brightPage?Math.min(235,background+35):Math.max(25,background-35);let xs=[],ys=[];for(let y=2;y<h-2;y+=2)for(let x=2;x<w-2;x+=2){const value=lum(x,y),page=brightPage?value>threshold:value<threshold;if(page){xs.push(x);ys.push(y);}}if(xs.length<w*h*.035)return {x:0,y:0,w:canvas.width,h:canvas.height,detected:false};xs.sort((a,b)=>a-b);ys.sort((a,b)=>a-b);const q=(array,p)=>array[Math.floor((array.length-1)*p)],x0=q(xs,.015),x1=q(xs,.985),y0=q(ys,.015),y1=q(ys,.985),bw=x1-x0,bh=y1-y0,area=bw*bh/(w*h);if(bw<w*.55||bh<h*.55||area<.38)return {x:0,y:0,w:canvas.width,h:canvas.height,detected:false};const pad=Math.max(3,Math.round(Math.min(w,h)*.018)),left=Math.max(0,x0-pad),top=Math.max(0,y0-pad),right=Math.min(w,x1+pad),bottom=Math.min(h,y1+pad);return{x:Math.round(left/scale),y:Math.round(top/scale),w:Math.round((right-left)/scale),h:Math.round((bottom-top)/scale),detected:left>w*.012||top>h*.012||right<w*.988||bottom<h*.988};
+}
+async function prepareScanVariants(file,mode='auto',rotation=scanRuntime.rotation||0) {
   setScanStatus('Improving the page…','Straightening orientation, enlarging text and correcting uneven light.','working');
-  const source=await decodeScanImage(file),sourceWidth=source.naturalWidth||source.width,sourceHeight=source.naturalHeight||source.height;
+  const source=await decodeScanImage(file),rotated=rotateScanSource(source,rotation),bounds=detectPageBounds(rotated),sourceWidth=bounds.w,sourceHeight=bounds.h;
   if(!sourceWidth||!sourceHeight)throw new Error('This image has no readable dimensions.');
   const longest=Math.max(sourceWidth,sourceHeight),scale=Math.max(.35,Math.min(3,longest<1800?1800/longest:2600/longest));
   const width=Math.max(1,Math.round(sourceWidth*scale)),height=Math.max(1,Math.round(sourceHeight*scale));
-  const gray=scanCanvas(width,height),context=gray.getContext('2d',{willReadFrequently:true});context.fillStyle='#fff';context.fillRect(0,0,width,height);context.drawImage(source,0,0,width,height);if(source.close)source.close();
+  const gray=scanCanvas(width,height),context=gray.getContext('2d',{willReadFrequently:true});context.fillStyle='#fff';context.fillRect(0,0,width,height);context.drawImage(rotated,bounds.x,bounds.y,bounds.w,bounds.h,0,0,width,height);if(source.close)source.close();scanRuntime.pageDetected=bounds.detected;
   const pixels=context.getImageData(0,0,width,height),data=pixels.data,histogram=new Uint32Array(256);let total=0;
   for(let i=0;i<data.length;i+=4){if(data[i+3]<24)continue;const value=Math.round(.2126*data[i]+.7152*data[i+1]+.0722*data[i+2]);histogram[value]++;total++;}
   const percentile=ratio=>{let seen=0,target=total*ratio;for(let i=0;i<256;i++){seen+=histogram[i];if(seen>=target)return i;}return ratio<.5?0:255;};
@@ -890,15 +906,25 @@ async function prepareScanVariants(file,mode='auto') {
     const value=.2126*data[i]+.7152*data[i+1]+.0722*data[i+2];let adjusted=(value-low)*255/(high-low);adjusted=(adjusted-148)*contrast+148;adjusted=Math.max(0,Math.min(255,adjusted));grayValues[p]=adjusted;data[i]=data[i+1]=data[i+2]=adjusted;data[i+3]=255;
   }
   context.putImageData(pixels,0,0);
-  if(mode==='printed')return [{canvas:gray,label:'clean text',psm:6}];
+  if(mode==='printed')return [{canvas:gray,label:'clean text',psm:6,pageDetected:bounds.detected}];
   const binary=scanCanvas(width,height),binaryContext=binary.getContext('2d'),binaryPixels=binaryContext.createImageData(width,height),output=binaryPixels.data;
   const integral=new Float64Array((width+1)*(height+1));
   for(let y=1;y<=height;y++){let row=0;for(let x=1;x<=width;x++){row+=grayValues[(y-1)*width+x-1];integral[y*(width+1)+x]=integral[(y-1)*(width+1)+x]+row;}}
   const radius=Math.max(12,Math.round(Math.min(width,height)/85)),bias=mode==='handwriting'?14:11;
   for(let y=0,p=0;y<height;y++){const y0=Math.max(0,y-radius),y1=Math.min(height-1,y+radius);for(let x=0;x<width;x++,p++){const x0=Math.max(0,x-radius),x1=Math.min(width-1,x+radius),count=(x1-x0+1)*(y1-y0+1),sum=integral[(y1+1)*(width+1)+(x1+1)]-integral[y0*(width+1)+(x1+1)]-integral[(y1+1)*(width+1)+x0]+integral[y0*(width+1)+x0],mean=sum/count,value=grayValues[p],ink=value<Math.min(185,mean-bias),index=p*4,tone=ink?0:255;output[index]=output[index+1]=output[index+2]=tone;output[index+3]=255;}}
   binaryContext.putImageData(binaryPixels,0,0);
-  return mode==='handwriting'?[{canvas:binary,label:'handwriting',psm:11},{canvas:gray,label:'soft handwriting',psm:11}]:[{canvas:gray,label:'balanced',psm:6},{canvas:binary,label:'high contrast',psm:11}];
+  return mode==='handwriting'?[{canvas:binary,label:'handwriting',psm:11,pageDetected:bounds.detected},{canvas:gray,label:'soft handwriting',psm:11,pageDetected:bounds.detected}]:[{canvas:gray,label:'balanced',psm:6,pageDetected:bounds.detected},{canvas:binary,label:'high contrast',psm:11,pageDetected:bounds.detected}];
 }
+function scanResultLines(result){const output=[];for(const block of result?.data?.blocks||[])for(const paragraph of block.paragraphs||[])for(const line of paragraph.lines||[]){const box=line.bbox||{},text=String(line.text||'').replace(/\s+/g,' ').trim();if(text.length>1&&Number.isFinite(box.x0))output.push({text,confidence:Number(line.confidence||0),box});}return output;}
+function scanCandidatesFromResults(results,width,height){
+  const ranked=[...results].sort((a,b)=>b.score-a.score),primary=ranked[0],lines=scanResultLines(primary);
+  const box=line=>({left:line.box.x0/width*100,top:line.box.y0/height*100,width:Math.max(.8,(line.box.x1-line.box.x0)/width*100),height:Math.max(1.2,(line.box.y1-line.box.y0)/height*100)});
+  const combined=lines.length?lines.map(line=>({raw:line.text,confidence:line.confidence,bbox:box(line)})):String(primary?.data?.text||'').split(/\r?\n/).map(raw=>({raw,confidence:Number(primary?.data?.confidence||0)}));
+  const seen=new Set(combined.map(item=>item.raw.toLowerCase().replace(/\W/g,'')));
+  for(const secondary of ranked.slice(1))for(const line of scanResultLines(secondary)){const key=line.text.toLowerCase().replace(/\W/g,'');if(key.length>2&&!seen.has(key)&&line.confidence>=45){seen.add(key);combined.push({raw:line.text,confidence:line.confidence,bbox:box(line)});}}
+  return combined;
+}
+function parseScanLines(lines){const candidates=[];for(const source of lines){const parsed=parseScanText(source.raw||source.text);for(const item of parsed)candidates.push({...item,confidence:Math.round(source.confidence||0),bbox:source.bbox});}const unique=new Map();for(const item of candidates){const key=item.text.toLowerCase().replace(/[^a-z0-9\u0900-\u097f]/g,'');const existing=unique.get(key);if(!existing||item.confidence>existing.confidence)unique.set(key,item);}return [...unique.values()].slice(0,80);}
 function ocrResultScore(result) {
   const text=String(result?.data?.text||'').trim(),confidence=Number(result?.data?.confidence||0);if(!text)return -1000;
   const useful=(text.match(/[A-Za-z0-9\u0900-\u097f]/g)||[]).length,weird=(text.match(/[^\sA-Za-z0-9\u0900-\u097f.,:;!?()'"\-\/&+%#@]/g)||[]).length,lines=text.split(/\n/).filter(line=>line.trim().length>1).length;
@@ -910,7 +936,8 @@ async function recognizeScan() {
   $('#scanRetry').hidden=true;$('#scanProgress').hidden=false;$('#scanProgressBar').style.width='2%';
   setScanStatus('Preparing recognition…','The first scan can take a little longer.','working');updateScanSelection();
   try {
-    const Tesseract=await loadOcrLibrary(),mode=$('#scanMode')?.value||'auto',language=$('#scanLanguage')?.value||'eng',variants=await prepareScanVariants(scanRuntime.file,mode),results=[];
+    const Tesseract=await loadOcrLibrary(),mode=$('#scanMode')?.value||'auto',language=$('#scanLanguage')?.value||'eng',variants=await prepareScanVariants(scanRuntime.file,mode,scanRuntime.rotation),results=[];
+    const preview=$('#scanPreview');preview.src=variants[0].canvas.toDataURL('image/jpeg',.9);preview.style.transform='none';const badge=$('#scanPageBadge');badge.hidden=false;badge.textContent=`${scanRuntime.pageDetected?'Page found · auto-cropped':'Full image'} · ${variants.length} reading pass${variants.length===1?'':'es'}`;
     scanRuntime.worker=await Tesseract.createWorker(language,1,{logger:message=>{
       const progress=Math.max(0,Math.min(1,Number(message.progress||0)));
       const pass=Math.max(0,scanRuntime.pass||0),total=Math.max(1,variants.length),overall=(pass+progress)/total;
@@ -919,9 +946,9 @@ async function recognizeScan() {
       setScanStatus(label.charAt(0).toUpperCase()+label.slice(1),`${Math.round(overall*100)}% complete · pass ${Math.min(total,pass+1)} of ${total}`,'working');
     }});
     for(let index=0;index<variants.length;index++){
-      scanRuntime.pass=index;const variant=variants[index];await scanRuntime.worker.setParameters({tessedit_pageseg_mode:String(variant.psm),preserve_interword_spaces:'1',user_defined_dpi:'300'});const result=await scanRuntime.worker.recognize(variant.canvas);results.push({...result,label:variant.label,score:ocrResultScore(result)});await new Promise(resolve=>setTimeout(resolve,0));
+      scanRuntime.pass=index;const variant=variants[index];await scanRuntime.worker.setParameters({tessedit_pageseg_mode:String(variant.psm),preserve_interword_spaces:'1',user_defined_dpi:'300'});const result=await scanRuntime.worker.recognize(variant.canvas,{}, {blocks:true,text:true});results.push({...result,label:variant.label,score:ocrResultScore(result)});await new Promise(resolve=>setTimeout(resolve,0));
     }
-    const result=results.sort((a,b)=>b.score-a.score)[0];scanRuntime.confidence=Math.round(result?.data?.confidence||0);scanRuntime.candidates=parseScanText(result?.data?.text||'');
+    const result=results.sort((a,b)=>b.score-a.score)[0];scanRuntime.confidence=Math.round(result?.data?.confidence||0);scanRuntime.candidates=parseScanLines(scanCandidatesFromResults(results,variants[0].canvas.width,variants[0].canvas.height));scanRuntime.regions=scanRuntime.candidates.filter(item=>item.bbox);
     $('#scanConfidence').textContent=scanRuntime.candidates.length?`${scanRuntime.confidence}% · ${result.label}`:'';
     if(scanRuntime.candidates.length)setScanStatus('Enhanced page read complete.',`${scanRuntime.candidates.length} editable items are ready. Check uncertain words before importing.`,'done');
     else setScanStatus('No clear lines were found.','Try a straighter photo with stronger light, or add a line manually.','error');
@@ -934,8 +961,8 @@ async function recognizeScan() {
 }
 function resetScan() {
   if(scanRuntime.previewUrl)URL.revokeObjectURL(scanRuntime.previewUrl);
-  scanRuntime.file=null;scanRuntime.previewUrl=null;scanRuntime.candidates=[];scanRuntime.running=false;scanRuntime.confidence=null;scanRuntime.pass=null;
-  const image=$('#scanPreview');image.hidden=true;image.removeAttribute('src');$('#scanPlaceholder').hidden=false;$('#scanProgress').hidden=true;$('#scanRetry').hidden=true;$('#scanConfidence').textContent='';
+  scanRuntime.file=null;scanRuntime.previewUrl=null;scanRuntime.candidates=[];scanRuntime.regions=[];scanRuntime.running=false;scanRuntime.confidence=null;scanRuntime.pass=null;scanRuntime.rotation=0;scanRuntime.pageDetected=false;
+  const image=$('#scanPreview');image.hidden=true;image.removeAttribute('src');image.style.transform='none';$('#scanPlaceholder').hidden=false;$('#scanProgress').hidden=true;$('#scanRetry').hidden=true;$('#scanConfidence').textContent='';$('#scanRegionOverlay').hidden=true;$('#scanRegionOverlay').innerHTML='';$('#scanPageBadge').hidden=true;
   setScanStatus('Ready when you are.','Nothing leaves this browser until you add the detected items.');renderScanCandidates();
 }
 function openScan() { resetScan();openModal('scanModal'); }
@@ -966,6 +993,21 @@ function importScanToPaper() {
   state.paper.imports.unshift({id:uid(),fileName:scanRuntime.file?.name||'Camera scan',importedAt:new Date().toISOString(),confidence:scanRuntime.confidence,count:selected.length});state.paper.imports=state.paper.imports.slice(0,20);
   save();reward(Math.min(25,5+selected.length*2),'A paper page became an actionable plan');closeModal('scanModal');ui.view='paper';render();toast('Page added to Paper',`${taskCount} task${taskCount===1?'':'s'}${noteCount?` and ${noteCount} editable heading${noteCount===1?'':'s'}`:''} now sync everywhere.`);resetScan();
 }
+
+function resetCaptureSource(){captureSourceRuntime={kind:null,file:null,url:'',title:'',description:'',text:'',siteName:'',suggestions:[],libraryId:null,running:false};const panel=$('#taskSourcePanel');if(panel)panel.open=false;$('#taskSourceUrl').value='';$('#taskSourceImage').value='';$('#taskSourceSuggestions').innerHTML='';$('#taskSourceSaveKnowledge').hidden=true;$('#taskSourceStatus').textContent='Choose a photo or enter a link. The source stays separate until you approve a suggestion.';}
+function sourceDestination(text=''){const value=text.toLowerCase(),rules=[{words:/algorithm|dsa|leetcode|graph|array|coding/,area:'Career',category:'DSA'},{words:/college|exam|assignment|lecture|test|semester/,area:'Career',category:'College'},{words:/meeting|call|interview|agenda/,area:'Career',category:'Meetings'},{words:/portfolio|project|website|deploy|resume|job/,area:'Career',category:'Projects'},{words:/health|workout|gym|doctor|walk|exercise/,area:'Personal',category:'Health'},{words:/home|buy|clean|repair|bill|grocery/,area:'Personal',category:'Home'},{words:/book|read|learn|course|study|tutorial/,area:'Growth',category:'Learning'}],rule=rules.find(item=>item.words.test(value));let area=state.taxonomy.find(item=>item.name===rule?.area)||state.taxonomy[0],category=area?.categories.find(item=>item.toLowerCase()===rule?.category.toLowerCase())||area?.categories[0]||'General';return{area:area?.name||'Unsorted',category};}
+function cleanTaskSuggestion(text){return String(text||'').replace(/^(?:todo|task|action|remember|note)\s*[:\-]\s*/i,'').replace(/[.?!]+$/,'').replace(/\s+/g,' ').trim().slice(0,180);}
+function buildSourceSuggestions(source){
+  const suggestions=[],seen=new Set(),add=(title,reason,next='Open the source and take the first small step',duration=30)=>{title=cleanTaskSuggestion(title);const key=title.toLowerCase();if(title.length<3||seen.has(key))return;seen.add(key);suggestions.push({id:uid(),title,reason,next,duration,...sourceDestination(`${title} ${source.title} ${source.description}`)});};
+  if(source.kind==='photo'){for(const item of parseScanText(source.text)){if(item.kind==='heading')continue;add(item.text,item.important?'Marked important on the page':'Detected from the uploaded page',item.text.length>90?'Turn this into one clear next action':'Start with the smallest visible step',item.completed?15:30);if(suggestions.length>=10)break;}}
+  else{const name=source.title||source.siteName||'this saved link',hay=`${source.title} ${source.description} ${source.text}`.toLowerCase(),tool=/tool|app|software|platform|generator|website/.test(hay),learning=/article|guide|book|tutorial|course|research|how to/.test(hay);add(`${tool?'Try':'Review'} ${name}`,'Suggested from the link',tool?'Open it and test one real use case':'Open it and decide what is useful',tool?30:20);if(learning)add(`Capture three useful takeaways from ${name}`,'Turns saved information into something reusable','Read one section and write the first takeaway',30);add(`Decide whether ${name} belongs in your workflow`,'Prevents saved links from becoming a forgotten pile','Compare it with what you already use',15);const actionLines=String(source.text||'').split('\n').filter(line=>/^(?:try|read|watch|download|create|build|learn|practice|complete|review|prepare|set up|install)\b/i.test(line.trim()));for(const line of actionLines.slice(0,3))add(line,'Action found on the linked page','Open the source and verify the action',30);}
+  return suggestions.slice(0,10);
+}
+function renderCaptureSource(){const root=$('#taskSourceSuggestions'),saveButton=$('#taskSourceSaveKnowledge');if(!root)return;root.innerHTML=captureSourceRuntime.suggestions.map(item=>`<article><div><small>${esc(item.reason)} · ${item.duration}m · ${esc(item.area)} / ${esc(item.category)}</small><b>${esc(item.title)}</b><span>${esc(item.next)}</span></div><button class="secondary" type="button" data-source-use="${item.id}">Use this task</button></article>`).join('');saveButton.hidden=!captureSourceRuntime.title||Boolean(captureSourceRuntime.libraryId);if(captureSourceRuntime.libraryId){saveButton.hidden=false;saveButton.disabled=true;saveButton.textContent='✓ Saved in Useful Library';}else{saveButton.disabled=false;saveButton.textContent='+ Keep this source in Useful Library';}}
+function applySourceSuggestion(id){const item=captureSourceRuntime.suggestions.find(entry=>entry.id===Number(id));if(!item)return;$('#taskTitle').value=item.title;populateAreaSelect($('#taskArea'),item.area);setTaskCategories(item.area,item.category);$('#taskDuration').value=String([15,30,45,60,90,120].includes(item.duration)?item.duration:30);$('#taskNext').value=item.next;$('#taskSourcePanel').open=true;toast('Suggestion placed in the task form','Review or change any detail before adding it.');$('#taskTitle').focus();}
+async function analyzeCaptureLink(){const url=$('#taskSourceUrl').value.trim();if(!url)return toast('Paste a complete link first');captureSourceRuntime.running=true;$('#taskSourceAnalyze').disabled=true;$('#taskSourceStatus').textContent='Reading the page and looking for useful actions…';try{const response=await fetch('/api/capture-source',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({url})}),result=await response.json().catch(()=>({}));if(!response.ok)throw new Error(result.error||'The link could not be read.');captureSourceRuntime={...captureSourceRuntime,kind:'link',url:result.source.url,title:result.source.title,description:result.source.description,text:result.source.text,siteName:result.source.siteName,suggestions:[],libraryId:null};captureSourceRuntime.suggestions=buildSourceSuggestions(captureSourceRuntime);$('#taskSourceStatus').textContent=`${captureSourceRuntime.suggestions.length} suggestions from “${captureSourceRuntime.title}”. Choose one or keep the source in your Library.`;renderCaptureSource();}catch(error){$('#taskSourceStatus').textContent=error.message;}finally{captureSourceRuntime.running=false;$('#taskSourceAnalyze').disabled=false;}}
+async function analyzeCapturePhoto(file){if(!file)return;if(!file.type.startsWith('image/')||file.size>20*1024*1024){toast('Choose a JPG, PNG or WebP image under 20 MB.');return;}captureSourceRuntime={...captureSourceRuntime,kind:'photo',file,title:file.name.replace(/\.[^.]+$/,''),description:'Text captured from an uploaded image',text:'',suggestions:[],libraryId:null,running:true};$('#taskSourcePanel').open=true;$('#taskSourceStatus').textContent='Improving the page and reading its text…';$('#taskSourceAnalyze').disabled=true;try{const Tesseract=await loadOcrLibrary(),variants=await prepareScanVariants(file,'auto',0),results=[],worker=await Tesseract.createWorker('eng',1,{logger:message=>{if(message.status==='recognizing text')$('#taskSourceStatus').textContent=`Reading photo… ${Math.round(Number(message.progress||0)*100)}%`;}});try{for(const variant of variants){await worker.setParameters({tessedit_pageseg_mode:String(variant.psm),preserve_interword_spaces:'1',user_defined_dpi:'300'});const result=await worker.recognize(variant.canvas,{}, {blocks:true,text:true});results.push({...result,score:ocrResultScore(result)});}}finally{await worker.terminate();}const best=results.sort((a,b)=>b.score-a.score)[0];captureSourceRuntime.text=best?.data?.text||'';captureSourceRuntime.suggestions=buildSourceSuggestions(captureSourceRuntime);if(!captureSourceRuntime.suggestions.length)throw new Error('No actionable lines were detected. Try a clearer, straighter photo.');$('#taskSourceStatus').textContent=`${captureSourceRuntime.suggestions.length} possible task${captureSourceRuntime.suggestions.length===1?'':'s'} found. Nothing is added until you choose one.`;renderCaptureSource();}catch(error){$('#taskSourceStatus').textContent=error.message||'The photo could not be read.';}finally{captureSourceRuntime.running=false;$('#taskSourceAnalyze').disabled=false;}}
+function saveCaptureSourceToKnowledge(){if(!captureSourceRuntime.title||captureSourceRuntime.libraryId)return;const destination=sourceDestination(`${captureSourceRuntime.title} ${captureSourceRuntime.description}`),id=uid();state.library.unshift({id,title:captureSourceRuntime.title,type:captureSourceRuntime.kind==='link'?'website':'reference',url:captureSourceRuntime.url||'',why:'Captured while turning this source into an action',context:`${destination.area}, ${destination.category}`,action:captureSourceRuntime.kind==='link'?'try':'reference',minutes:30,tags:['captured',captureSourceRuntime.kind],status:'ready',note:String(captureSourceRuntime.description||captureSourceRuntime.text).slice(0,800),createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});captureSourceRuntime.libraryId=id;save();renderCaptureSource();toast('Saved to Useful Library','Tasks with similar words can now surface this source when you need it.');}
 
 let paperRuntime = { tool: 'select', stroke: null, shape: null, drag: null };
 function drawPaperCanvas(preview = null) {
@@ -1013,6 +1055,8 @@ function initPaperBoard() {
 }
 
 document.addEventListener('click', event => {
+  const sourceUse=event.target.closest('[data-source-use]');if(sourceUse){applySourceSuggestion(sourceUse.dataset.sourceUse);return;}
+  const scanRegion=event.target.closest('[data-scan-region]');if(scanRegion){const item=scanRuntime.candidates.find(entry=>entry.id===Number(scanRegion.dataset.scanRegion));if(item){item.included=!item.included;renderScanCandidates();}return;}
   const view = event.target.closest('[data-view]'); if (view) { event.preventDefault(); setView(view.dataset.view); return; }
   const canvasLock=event.target.closest('[data-canvas-lock]');if(canvasLock){setCanvasLock(canvasLock.dataset.canvasLock);return;}
   const canvasZoom=event.target.closest('[data-canvas-zoom]');if(canvasZoom){const [kind,action]=canvasZoom.dataset.canvasZoom.split(':');setCanvasZoom(kind,action);return;}
@@ -1116,7 +1160,7 @@ document.addEventListener('input', event => {
 });
 document.addEventListener('change', event => {
   if (event.target.matches('[data-progress]')) updateProgress(Number(event.target.closest('[data-task]').dataset.task), event.target.value);
-  if(event.target.matches('[data-scan-include]')){const item=scanRuntime.candidates.find(x=>x.id===Number(event.target.dataset.scanInclude));if(item)item.included=event.target.checked;event.target.closest('.scan-candidate')?.classList.toggle('excluded',!event.target.checked);updateScanSelection();}
+  if(event.target.matches('[data-scan-include]')){const item=scanRuntime.candidates.find(x=>x.id===Number(event.target.dataset.scanInclude));if(item)item.included=event.target.checked;event.target.closest('.scan-candidate')?.classList.toggle('excluded',!event.target.checked);renderScanRegions();updateScanSelection();}
   if(event.target.matches('[data-scan-kind]')){const item=scanRuntime.candidates.find(x=>x.id===Number(event.target.dataset.scanKind));if(item)item.kind=event.target.value;}
   if(event.target.matches('[data-scan-important]')){const item=scanRuntime.candidates.find(x=>x.id===Number(event.target.dataset.scanImportant));if(item)item.important=event.target.checked;}
 });
@@ -1164,8 +1208,12 @@ $('#backupList').addEventListener('click',async event=>{const button=event.targe
 $('#scanCamera').addEventListener('change',event=>{acceptScanFile(event.target.files?.[0]);event.target.value='';});
 $('#scanUpload').addEventListener('change',event=>{acceptScanFile(event.target.files?.[0]);event.target.value='';});
 $('#scanRetry').addEventListener('click',recognizeScan);$('#scanImport').addEventListener('click',importScanToPaper);
+$('#scanRotate').addEventListener('click',()=>{if(!scanRuntime.file||scanRuntime.running)return;scanRuntime.rotation=(scanRuntime.rotation+1)%4;const image=$('#scanPreview');image.src=scanRuntime.previewUrl;image.style.transform=`rotate(${scanRuntime.rotation*90}deg)`;recognizeScan();});
+$('#scanPreview').addEventListener('load',renderScanRegions);
+window.addEventListener('resize',renderScanRegions);
 $('#scanMode').addEventListener('change',event=>{$('#scanQualityTip').textContent=event.target.value==='handwriting'?'Handwriting mode uses strong local contrast and sparse-text reading. Keep the page flat and fill most of the photo.':event.target.value==='printed'?'Printed mode is faster for clean documents and screenshots.':'Auto enhance corrects lighting and tries two reading styles. Choose Handwriting for notes written with a pen.';if(scanRuntime.file)recognizeScan();});
 $('#scanLanguage').addEventListener('change',()=>{if(scanRuntime.file)recognizeScan();});
+$('#taskSourceAnalyze').addEventListener('click',analyzeCaptureLink);$('#taskSourceImage').addEventListener('change',event=>{const file=event.target.files?.[0];event.target.value='';analyzeCapturePhoto(file);});$('#taskSourceSaveKnowledge').addEventListener('click',saveCaptureSourceToKnowledge);
 $('#exportBackup').addEventListener('click',exportBackup);
 $('#clearCompletedHistory').addEventListener('click',clearCompletedHistory);
 $('#resetMomentum').addEventListener('click',resetMomentum);
@@ -1192,8 +1240,9 @@ $('#libraryForm').addEventListener('submit',event=>{event.preventDefault();const
 $('#libraryDelete').addEventListener('click',()=>{if(!ui.libraryId)return;const index=state.library.findIndex(item=>item.id===ui.libraryId),removed=clone(state.library[index]),taskLinks=state.tasks.filter(task=>task.sourceLibraryId===removed.id||task.sourceLibraryIds?.includes(removed.id)).map(task=>({id:task.id,sourceLibraryId:task.sourceLibraryId||null,sourceLibraryIds:clone(task.sourceLibraryIds||[])}));taskLinks.forEach(link=>{const task=state.tasks.find(entry=>entry.id===link.id);if(task.sourceLibraryId===removed.id)delete task.sourceLibraryId;if(Array.isArray(task.sourceLibraryIds))task.sourceLibraryIds=task.sourceLibraryIds.filter(id=>id!==removed.id);});state.library.splice(index,1);ui.libraryId=null;save();closeModal('libraryModal');render();toast('Library item deleted','Its task links were safely removed. It can be restored for the next few seconds.',{label:'Undo',run:()=>{if(!state.library.some(item=>item.id===removed.id))state.library.splice(Math.max(0,index),0,removed);taskLinks.forEach(link=>{const task=state.tasks.find(entry=>entry.id===link.id);if(task){if(link.sourceLibraryId)task.sourceLibraryId=link.sourceLibraryId;task.sourceLibraryIds=link.sourceLibraryIds;}});save();render();toast('Library item restored','Its task links are back too.');}});});
 $('#taskForm').addEventListener('submit', event => {
   event.preventDefault(); const plan=$('#taskPlan').value, date=$('#taskDate').value || (plan==='inbox'?null:iso());
-  const values={title:$('#taskTitle').value.trim(),area:$('#taskArea').value,category:$('#taskCategory').value,duration:Number($('#taskDuration').value),energy:$('#taskEnergy').value,plan,date:plan==='inbox'?null:date,start:plan==='fixed'?$('#taskStart').value:null,windowStart:$('#taskStart').value,windowEnd:$('#taskEnd').value,decideBy:$('#decideBy').value||iso(),next:$('#taskNext').value.trim(),timer:$('#taskTimer').checked,publish:$('#taskPublish').checked,publicTitle:'Focused work',calendar:$('#taskCalendar').checked,repeat:$('#taskRepeat').value,paperMarks:{circle:$('#taskCircle').checked,tick:$('#taskReady').checked,box:$('#taskBox').checked,star:$('#taskStar').checked},updatedAt:new Date().toISOString()};
   const existing=state.tasks.find(t=>t.id===ui.editTaskId);
+  const sourceCapture=captureSourceRuntime.title?{kind:captureSourceRuntime.kind,url:captureSourceRuntime.url||'',title:captureSourceRuntime.title,description:captureSourceRuntime.description||'',siteName:captureSourceRuntime.siteName||''}:existing?.sourceCapture||null;
+  const values={title:$('#taskTitle').value.trim(),area:$('#taskArea').value,category:$('#taskCategory').value,duration:Number($('#taskDuration').value),energy:$('#taskEnergy').value,plan,date:plan==='inbox'?null:date,start:plan==='fixed'?$('#taskStart').value:null,windowStart:$('#taskStart').value,windowEnd:$('#taskEnd').value,decideBy:$('#decideBy').value||iso(),next:$('#taskNext').value.trim(),timer:$('#taskTimer').checked,publish:$('#taskPublish').checked,publicTitle:'Focused work',calendar:$('#taskCalendar').checked,repeat:$('#taskRepeat').value,paperMarks:{circle:$('#taskCircle').checked,tick:$('#taskReady').checked,box:$('#taskBox').checked,star:$('#taskStar').checked},sourceCapture,sourceLibraryId:captureSourceRuntime.libraryId||existing?.sourceLibraryId||null,updatedAt:new Date().toISOString()};
   if(existing){Object.assign(existing,values);toast('Task updated','Paper, planner and task views now use the changes.');}
   else{state.tasks.unshift({id:uid(),progress:0,postponed:0,createdAt:new Date().toISOString(),...values});reward(5,'Your mind can release the task');toast('Captured','The task is safely in your command center and cloud.');}
   save(); ui.editTaskId=null; closeModal('taskModal'); render();

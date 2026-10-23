@@ -133,7 +133,7 @@ const manifest=JSON.parse(await readFile(new URL('../client/manifest.webmanifest
 assert.equal(manifest.share_target.action,'/?share-target=1','Installed app can receive shared links');
 const serviceWorker=await readFile(new URL('../client/sw.js',import.meta.url),'utf8');
 assert.match(serviceWorker,/periodicsync/,'Supporting installed browsers can check reminders in the background');
-assert.match(serviceWorker,/life-command-static-v13/,'A new cache generation ships account-safe app assets');
+assert.match(serviceWorker,/life-command-static-v14/,'A new cache generation ships account-safe app assets');
 assert.match(serviceWorker,/freshAsset/,'JavaScript and CSS check the network before using stale cache');
 const page=await readFile(new URL('../client/index.html',import.meta.url),'utf8');
 const stylesheet=await readFile(new URL('../client/styles.css',import.meta.url),'utf8');
