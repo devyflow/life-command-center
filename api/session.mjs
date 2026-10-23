@@ -8,7 +8,7 @@ export default async function handler(request, response) {
     const { registry } = await loadRegistry();
     const resolved = session.legacy ? { account:registry.accounts.owner, workspace:registry.workspaces.owner } : accountFromSession(registry, session);
     if (!resolved) return json(response, { error:"This session is no longer active" }, 401);
-    const claims = { accountId:resolved.account.id, workspaceId:resolved.workspace.id, role:resolved.account.role, sessionVersion:resolved.account.sessionVersion };
+    const claims = { accountId:resolved.account.id, workspaceId:resolved.workspace.id, role:resolved.account.role, sessionVersion:resolved.account.sessionVersion, sessionId:session.claims?.sessionId };
     if (session.remembered) response.setHeader("set-cookie", sessionCookie(createSession(process.env.ACCESS_SECRET, REMEMBERED_SESSION_SECONDS, claims), REMEMBERED_SESSION_SECONDS));
     return json(response, {
       user:{ name:resolved.account.displayName, email:"", ...publicAccount(resolved.account) },

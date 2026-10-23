@@ -1,12 +1,35 @@
-import { createHash, randomBytes, randomUUID, scryptSync, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes, randomUUID, scryptSync, timingSafeEqual } from "node:crypto";
 
 const DEFAULT_UPSTREAM = "https://lcc.aaadhar0.chatgpt.site";
 const REGISTRY_VERSION = 1;
 const MAX_TESTERS = 10;
+const MAX_AUDIT = 300;
+const MAX_BACKUPS = 3;
+const LOGIN_WINDOW_MS = 15 * 60_000;
+const LOGIN_LIMIT = 8;
 
 const now = () => new Date().toISOString();
 const clone = value => JSON.parse(JSON.stringify(value));
 const tokenHash = value => createHash("sha256").update(String(value || "")).digest("hex");
+const securityHash = value => createHmac("sha256", process.env.ACCESS_SECRET || "local").update(String(value || "")).digest("hex");
+const audit = (registry, actorId, action, targetId, detail = "") => registry.audit.push({ id:randomUUID(), at:now(), actorId, action, targetId, detail:String(detail || "").slice(0, 160) });
+const recoveryCode = () => `LCC-${randomBytes(4).toString("hex").toUpperCase()}-${randomBytes(4).toString("hex").toUpperCase()}`;
+function issueRecoveryCodes(account) {
+  const codes = Array.from({ length:8 }, recoveryCode);
+  account.recoveryCodes = codes.map(code => tokenHash(code));
+  account.recoveryCodesCreatedAt = now();
+  return codes;
+}
+function deviceName(userAgent = "") {
+  const ua=String(userAgent).toLowerCase(), platform=ua.includes("iphone")?"iPhone":ua.includes("ipad")?"iPad":ua.includes("android")?"Android":ua.includes("windows")?"Windows":ua.includes("mac")?"Mac":"Browser";
+  const browser=ua.includes("edg/")?"Edge":ua.includes("chrome/")?"Chrome":ua.includes("safari/")?"Safari":ua.includes("firefox/")?"Firefox":"Web app";
+  return `${platform} · ${browser}`;
+}
+function createDeviceSession(registry, account, context = {}) {
+  const id=randomUUID(),createdAt=now();
+  registry.sessions[id]={id,accountId:account.id,device:deviceName(context.userAgent),ipHash:securityHash(context.ip || "unknown").slice(0,16),createdAt,lastSeenAt:createdAt,expiresAt:new Date(Date.now()+365*86400_000).toISOString(),revokedAt:null};
+  return registry.sessions[id];
+}
 
 export function passwordRecord(password, salt = randomBytes(16).toString("base64url")) {
   const hash = scryptSync(String(password), salt, 32, { N:16384, r:8, p:1 }).toString("base64url");
@@ -43,13 +66,15 @@ function freshRegistry(legacyState, ownerPassword) {
       owner: {
         id:"owner", accessId:"owner", displayName:"Owner", role:"owner", status:"active",
         password:passwordRecord(ownerPassword), sessionVersion:1, workspaceId:"owner",
-        ownerAccess:true, failedAttempts:0, lockedUntil:null, createdAt,
+        ownerAccess:true, failedAttempts:0, lockedUntil:null, recoveryCodes:[], createdAt,
       },
     },
     workspaces: {
-      owner: { id:"owner", name:"My command center", ownerAccountId:"owner", state:legacyState, revision:0, updatedAt:createdAt },
+      owner: { id:"owner", name:"My command center", ownerAccountId:"owner", state:legacyState, revision:0, backups:[], updatedAt:createdAt },
     },
     invites: [],
+    sessions: {},
+    loginAttempts: {},
     audit: [{ id:randomUUID(), at:createdAt, actorId:"owner", action:"owner_workspace_migrated", targetId:"owner" }],
     updatedAt:createdAt,
   };
@@ -60,6 +85,10 @@ function normalizeRegistry(registry) {
   registry.accounts ||= {};
   registry.workspaces ||= {};
   registry.invites ||= [];
+  registry.sessions ||= {};
+  registry.loginAttempts ||= {};
+  Object.values(registry.accounts).forEach(account=>{account.recoveryCodes ||= [];});
+  Object.values(registry.workspaces).forEach(workspace=>{workspace.backups ||= [];});
   registry.audit ||= [];
   registry.updatedAt ||= now();
   return registry;
@@ -120,7 +149,7 @@ export async function mutateRegistry(mutator) {
       : freshRegistry(raw.state, process.env.ACCESS_SECRET);
     const result = await mutator(registry);
     registry.updatedAt = now();
-    registry.audit = registry.audit.slice(-250);
+    registry.audit = registry.audit.slice(-MAX_AUDIT);
     if (JSON.stringify(registry).length > 850_000) throw new Error("Combined tester workspaces have reached the prototype storage limit. Export or remove an unused tester workspace before adding more data.");
     const written = await writeRaw(registry, raw.revision);
     if (written.response.ok) return { registry, result, upstreamRevision:Number(written.result.revision || raw.revision + 1) };
@@ -132,6 +161,10 @@ export function accountFromSession(registry, session) {
   if (!session?.claims) return null;
   const account = registry.accounts[session.claims.accountId];
   if (!account || account.status !== "active" || Number(account.sessionVersion) !== Number(session.claims.sessionVersion)) return null;
+  if (session.claims.sessionId) {
+    const deviceSession = registry.sessions[session.claims.sessionId];
+    if (!deviceSession || deviceSession.accountId !== account.id || deviceSession.revokedAt || Date.parse(deviceSession.expiresAt || 0) <= Date.now()) return null;
+  }
   const workspace = registry.workspaces[session.claims.workspaceId];
   if (!workspace) return null;
   if (account.role === "owner") {
@@ -143,14 +176,26 @@ export function accountFromSession(registry, session) {
   return { account, workspace };
 }
 
-export async function authenticate(accessId, password) {
+function pruneLoginAttempts(registry) {
+  const cutoff=Date.now()-LOGIN_WINDOW_MS;
+  for (const [key,entry] of Object.entries(registry.loginAttempts)) if (Date.parse(entry.startedAt || 0)<cutoff) delete registry.loginAttempts[key];
+}
+
+export async function authenticate(accessId, password, context = {}) {
   const normalized = normalizeAccessId(accessId || "owner");
   return mutateRegistry(registry => {
+    pruneLoginAttempts(registry);
+    const attemptKey=securityHash(`${context.ip || "unknown"}|${normalized}`), attempt=registry.loginAttempts[attemptKey];
+    if (attempt && attempt.count >= LOGIN_LIMIT) return { ok:false, error:"Too many attempts. Try again in a few minutes." };
     const account = Object.values(registry.accounts).find(item => item.accessId === normalized);
-    if (!account || account.status !== "active") return { ok:false, error:"Access ID or passphrase is not correct." };
+    if (!account || account.status !== "active") {
+      registry.loginAttempts[attemptKey]={count:Number(attempt?.count || 0)+1,startedAt:attempt?.startedAt || now()};
+      return { ok:false, error:"Access ID or passphrase is not correct." };
+    }
     const lockedUntil = Date.parse(account.lockedUntil || 0);
     if (lockedUntil > Date.now()) return { ok:false, error:"Too many attempts. Try again in a few minutes." };
     if (!passwordMatches(password, account.password)) {
+      registry.loginAttempts[attemptKey]={count:Number(attempt?.count || 0)+1,startedAt:attempt?.startedAt || now()};
       account.failedAttempts = Number(account.failedAttempts || 0) + 1;
       if (account.failedAttempts >= 6) {
         account.failedAttempts = 0;
@@ -160,12 +205,14 @@ export async function authenticate(accessId, password) {
     }
     account.failedAttempts = 0;
     account.lockedUntil = null;
-    registry.audit.push({ id:randomUUID(), at:now(), actorId:account.id, action:"signed_in", targetId:account.workspaceId });
-    return { ok:true, account };
+    delete registry.loginAttempts[attemptKey];
+    const deviceSession=createDeviceSession(registry,account,context);
+    audit(registry,account.id,"signed_in",account.workspaceId,deviceSession.device);
+    return { ok:true, account, deviceSession };
   });
 }
 
-export async function activateInvite(token, displayName, password, ownerAccess) {
+export async function activateInvite(token, displayName, password, ownerAccess, context = {}) {
   if (String(password || "").length < 10) throw new Error("Use at least 10 characters for the passphrase.");
   const hashed = tokenHash(token);
   return mutateRegistry(registry => {
@@ -177,18 +224,21 @@ export async function activateInvite(token, displayName, password, ownerAccess) 
       account.password = passwordRecord(password);
       account.sessionVersion = Number(account.sessionVersion || 1) + 1;
       account.failedAttempts = 0; account.lockedUntil = null; invite.usedAt = now();
-      registry.audit.push({ id:randomUUID(), at:now(), actorId:account.id, action:"passphrase_reset", targetId:account.id });
-      return { account, reset:true };
+      Object.values(registry.sessions).filter(item=>item.accountId===account.id&&!item.revokedAt).forEach(item=>item.revokedAt=now());
+      const deviceSession=createDeviceSession(registry,account,context);
+      audit(registry,account.id,"passphrase_reset",account.id);
+      return { account, reset:true, deviceSession };
     }
     if (!ownerAccess) throw new Error("Owner support access must be accepted for this tester invitation.");
     if (Object.values(registry.accounts).filter(account => account.role === "tester" && account.status === "active").length >= MAX_TESTERS) throw new Error("The tester limit has been reached.");
     const id = randomUUID(), workspaceId = randomUUID(), name = String(displayName || invite.displayName || "Tester").trim().slice(0, 60) || "Tester";
-    const account = { id, accessId:makeAccessId(name, registry), displayName:name, role:"tester", status:"active", password:passwordRecord(password), sessionVersion:1, workspaceId, ownerAccess:true, failedAttempts:0, lockedUntil:null, createdAt:now() };
+    const account = { id, accessId:makeAccessId(name, registry), displayName:name, role:"tester", status:"active", password:passwordRecord(password), sessionVersion:1, workspaceId, ownerAccess:true, failedAttempts:0, lockedUntil:null, recoveryCodes:[], createdAt:now() };
     registry.accounts[id] = account;
-    registry.workspaces[workspaceId] = { id:workspaceId, name:`${name}'s command center`, ownerAccountId:id, state:null, revision:0, updatedAt:now() };
+    registry.workspaces[workspaceId] = { id:workspaceId, name:`${name}'s command center`, ownerAccountId:id, state:null, revision:0, backups:[], updatedAt:now() };
     invite.usedAt = now(); invite.accountId = id;
-    registry.audit.push({ id:randomUUID(), at:now(), actorId:id, action:"tester_activated", targetId:workspaceId });
-    return { account, reset:false };
+    const recoveryCodes=issueRecoveryCodes(account),deviceSession=createDeviceSession(registry,account,context);
+    audit(registry,id,"tester_activated",workspaceId);
+    return { account, reset:false, recoveryCodes, deviceSession };
   });
 }
 
@@ -205,7 +255,7 @@ export async function createInvite(ownerId, displayName, type = "tester", accoun
     }
     registry.invites = registry.invites.filter(item => !item.usedAt && Date.parse(item.expiresAt) > Date.now());
     registry.invites.push({ id:randomUUID(), tokenHash:tokenHash(token), type, accountId, displayName:String(displayName || "Tester").trim().slice(0, 60), createdBy:ownerId, createdAt:now(), expiresAt, usedAt:null });
-    registry.audit.push({ id:randomUUID(), at:now(), actorId:ownerId, action:type === "reset" ? "reset_link_created" : "tester_invited", targetId:accountId || "pending" });
+    audit(registry,ownerId,type === "reset" ? "reset_link_created" : "tester_invited",accountId || "pending");
     return true;
   });
   return { ...output, token, expiresAt };
@@ -216,11 +266,11 @@ export async function updateTester(ownerId, accountId, action) {
     const owner = registry.accounts[ownerId], target = registry.accounts[accountId];
     if (!owner || owner.role !== "owner") throw new Error("Owner access required.");
     if (!target || target.role !== "tester") throw new Error("Tester account not found.");
-    if (action === "disable") { target.status = "disabled"; target.sessionVersion += 1; }
+    if (action === "disable") { target.status = "disabled"; target.sessionVersion += 1; Object.values(registry.sessions).filter(item=>item.accountId===target.id&&!item.revokedAt).forEach(item=>item.revokedAt=now()); }
     else if (action === "enable") { target.status = "active"; target.sessionVersion += 1; }
-    else if (action === "delete") { delete registry.workspaces[target.workspaceId]; delete registry.accounts[target.id]; }
+    else if (action === "delete") { const workspaceId=target.workspaceId; audit(registry,ownerId,"tester_deleted",accountId); delete registry.workspaces[workspaceId]; delete registry.accounts[target.id]; for(const [id,item] of Object.entries(registry.sessions))if(item.accountId===target.id)delete registry.sessions[id]; registry.invites=registry.invites.filter(item=>item.accountId!==target.id); return true; }
     else throw new Error("Unsupported account action.");
-    registry.audit.push({ id:randomUUID(), at:now(), actorId:ownerId, action:`tester_${action}d`, targetId:accountId });
+    audit(registry,ownerId,`tester_${action}d`,accountId);
     return true;
   });
 }
@@ -230,9 +280,69 @@ export async function setOwnerAccess(accountId, allowed) {
     const account = registry.accounts[accountId];
     if (!account || account.role !== "tester" || account.status !== "active") throw new Error("Tester account not found.");
     account.ownerAccess = Boolean(allowed);
-    registry.audit.push({ id:randomUUID(), at:now(), actorId:accountId, action:allowed ? "owner_support_enabled" : "owner_support_disabled", targetId:account.workspaceId });
+    audit(registry,accountId,allowed ? "owner_support_enabled" : "owner_support_disabled",account.workspaceId);
     return account.ownerAccess;
   });
+}
+
+export async function recoverAccount(accessId, recoveryCodeValue, newPassword, context = {}) {
+  if (String(newPassword || "").length < 10) throw new Error("Use at least 10 characters for the new passphrase.");
+  const normalized=normalizeAccessId(accessId),hashed=tokenHash(String(recoveryCodeValue || "").trim().toUpperCase());
+  return mutateRegistry(registry=>{
+    const account=Object.values(registry.accounts).find(item=>item.accessId===normalized&&item.status==="active");
+    const index=account?.recoveryCodes?.findIndex(code=>code===hashed) ?? -1;
+    if(!account||index<0)throw new Error("The Access ID or recovery code is not correct.");
+    account.recoveryCodes.splice(index,1);account.password=passwordRecord(newPassword);account.sessionVersion=Number(account.sessionVersion||1)+1;account.failedAttempts=0;account.lockedUntil=null;
+    Object.values(registry.sessions).filter(item=>item.accountId===account.id&&!item.revokedAt).forEach(item=>item.revokedAt=now());
+    const deviceSession=createDeviceSession(registry,account,context);audit(registry,account.id,"recovery_code_used",account.id);
+    return {ok:true,account,deviceSession};
+  });
+}
+
+export async function changePassword(accountId,currentPassword,newPassword,context={}) {
+  if(String(newPassword||"").length<10)throw new Error("Use at least 10 characters for the new passphrase.");
+  return mutateRegistry(registry=>{
+    const account=registry.accounts[accountId];if(!account||!passwordMatches(currentPassword,account.password))throw new Error("Current passphrase is not correct.");
+    account.password=passwordRecord(newPassword);account.sessionVersion=Number(account.sessionVersion||1)+1;
+    Object.values(registry.sessions).filter(item=>item.accountId===account.id&&!item.revokedAt).forEach(item=>item.revokedAt=now());
+    const deviceSession=createDeviceSession(registry,account,context);audit(registry,account.id,"passphrase_changed",account.id);
+    return {account,deviceSession};
+  });
+}
+
+export async function regenerateRecoveryCodes(accountId,currentPassword) {
+  return mutateRegistry(registry=>{
+    const account=registry.accounts[accountId];if(!account||!passwordMatches(currentPassword,account.password))throw new Error("Current passphrase is not correct.");
+    const codes=issueRecoveryCodes(account);audit(registry,account.id,"recovery_codes_regenerated",account.id);return {codes};
+  });
+}
+
+export async function revokeSession(accountId,sessionId,currentSessionId=null) {
+  return mutateRegistry(registry=>{
+    const target=registry.sessions[sessionId];if(!target||target.accountId!==accountId)throw new Error("Device session not found.");
+    target.revokedAt=now();audit(registry,accountId,"device_revoked",sessionId,target.device);return {revokedCurrent:sessionId===currentSessionId};
+  });
+}
+
+export async function revokeOtherSessions(accountId,currentSessionId=null) {
+  return mutateRegistry(registry=>{let count=0;for(const item of Object.values(registry.sessions))if(item.accountId===accountId&&item.id!==currentSessionId&&!item.revokedAt){item.revokedAt=now();count++;}audit(registry,accountId,"other_devices_revoked",accountId,String(count));return {count};});
+}
+
+export async function cancelInvite(ownerId,inviteId) {
+  return mutateRegistry(registry=>{const owner=registry.accounts[ownerId],invite=registry.invites.find(item=>item.id===inviteId&&!item.usedAt);if(!owner||owner.role!=="owner")throw new Error("Owner access required.");if(!invite)throw new Error("Invitation is no longer active.");invite.usedAt=now();invite.cancelledAt=invite.usedAt;audit(registry,ownerId,"invite_cancelled",invite.id);return true;});
+}
+
+export async function createWorkspaceBackup(accountId,workspaceId,label="Manual restore point") {
+  return mutateRegistry(registry=>{const account=registry.accounts[accountId],workspace=registry.workspaces[workspaceId];if(!account||!workspace||workspace.id!==account.workspaceId&&account.role!=="owner")throw new Error("Workspace unavailable.");if(!workspace.state)throw new Error("Save something in this workspace before creating a restore point.");const original=workspace.backups||[],backup={id:randomUUID(),at:now(),revision:Number(workspace.revision||0),label:String(label).slice(0,60),state:clone(workspace.state)};workspace.backups=[backup,...original].slice(0,MAX_BACKUPS);if(JSON.stringify(registry).length>800_000){workspace.backups=original;throw new Error("This workspace is too large for another restore point. Download a JSON backup instead.");}audit(registry,accountId,"restore_point_created",workspaceId,backup.label);return {backup:{...backup,state:undefined}};});
+}
+
+export async function restoreWorkspaceBackup(accountId,workspaceId,backupId) {
+  return mutateRegistry(registry=>{const account=registry.accounts[accountId],workspace=registry.workspaces[workspaceId];if(!account||!workspace||workspace.id!==account.workspaceId&&account.role!=="owner")throw new Error("Workspace unavailable.");const backup=(workspace.backups||[]).find(item=>item.id===backupId);if(!backup)throw new Error("Restore point not found.");if(workspace.state){const current={id:randomUUID(),at:now(),revision:Number(workspace.revision||0),label:"Before restore",state:clone(workspace.state)};workspace.backups=[current,...workspace.backups.filter(item=>item.id!==backupId)].slice(0,MAX_BACKUPS);}workspace.state=clone(backup.state);workspace.revision=Number(workspace.revision||0)+1;workspace.updatedAt=now();audit(registry,accountId,"workspace_restored",workspaceId,backup.at);return {revision:workspace.revision};});
+}
+
+export function addAutomaticBackup(registry,workspace) {
+  if(!workspace?.state)return false;const latest=(workspace.backups||[]).find(item=>item.label==="Automatic");if(latest&&Date.now()-Date.parse(latest.at)<12*60*60_000)return false;
+  const original=workspace.backups||[];workspace.backups=[{id:randomUUID(),at:now(),revision:Number(workspace.revision||0),label:"Automatic",state:clone(workspace.state)},...original].slice(0,MAX_BACKUPS);if(JSON.stringify(registry).length>800_000){workspace.backups=original;return false;}return true;
 }
 
 export function publicAccount(account) {

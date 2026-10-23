@@ -151,11 +151,18 @@
           <div class="account-owner-tools" id="accountOwnerTools" hidden>
             <form class="tester-invite-form" id="testerInviteForm"><input id="testerName" maxlength="60" required placeholder="Friend's name" aria-label="Friend's name"><button class="primary" type="submit">Create tester invite</button></form>
             <div class="invite-result" id="inviteResult" hidden><span>One-time invitation · expires in 7 days</span><div><input id="inviteLink" readonly aria-label="Invitation link"><button class="secondary" id="copyInvite" type="button">Copy</button></div></div>
+            <div class="account-subsection"><div class="account-subhead"><b>Pending invitations</b><small>Cancel links you no longer want active.</small></div><div class="tester-list" id="pendingInviteList"></div></div>
             <div class="tester-list" id="testerList"></div>
+            <details class="account-subsection"><summary>Recent account activity</summary><div class="account-event-list" id="accountAudit"></div></details>
           </div>
           <div class="account-tester-tools" id="accountTesterTools" hidden>
             <div class="access-id-card"><span>Your Access ID</span><b id="testerAccessId"></b><small>Use this with your passphrase on another device.</small></div>
             <label class="support-toggle"><input id="ownerAccessToggle" type="checkbox"><span><b>Owner support access</b><small>Allow the workspace owner to open this tester space when support is needed.</small></span></label>
+          </div>
+          <div class="account-security-tools" id="accountSecurityTools">
+            <div class="account-subsection"><div class="account-subhead"><b>Passphrase & recovery</b><small id="recoveryStatus">Recovery status loading…</small></div><form id="changePasswordForm" class="account-inline-form"><input id="currentPassword" type="password" autocomplete="current-password" required placeholder="Current passphrase"><input id="newPassword" type="password" autocomplete="new-password" minlength="10" required placeholder="New passphrase (10+ characters)"><button class="secondary" type="submit">Change passphrase</button></form><div class="account-inline-form"><input id="recoveryPassword" type="password" autocomplete="current-password" placeholder="Current passphrase"><button class="secondary" id="generateRecoveryCodes" type="button">Create new recovery codes</button></div><div class="recovery-codes" id="recoveryCodes" hidden><b>Save these one-time codes somewhere safe</b><pre id="recoveryCodeText"></pre><button class="secondary" id="copyRecoveryCodes" type="button">Copy codes</button></div></div>
+            <div class="account-subsection"><div class="account-subhead"><b>Signed-in devices</b><button class="bare-link" id="revokeOtherSessions" type="button">Sign out other devices</button></div><div class="device-list" id="deviceSessionList"></div></div>
+            <div class="account-subsection"><div class="account-subhead"><b>Workspace reliability</b><small id="storageHealth">Checking storage…</small></div><div class="backup-actions"><button class="secondary" id="createRestorePoint" type="button">Create restore point</button><span>Automatic snapshots are kept before major changes.</span></div><div class="backup-list" id="backupList"></div></div>
           </div>
         </section>
       </div>

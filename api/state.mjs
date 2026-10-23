@@ -1,5 +1,5 @@
 import { json, readJsonBody, sameOrigin, sessionDetails } from "./_auth.mjs";
-import { accountFromSession, loadRegistry, mutateRegistry } from "./_workspace.mjs";
+import { accountFromSession, addAutomaticBackup, loadRegistry, mutateRegistry } from "./_workspace.mjs";
 
 export default async function handler(request, response) {
   if (!["GET","PUT"].includes(request.method)) return json(response, { error:"Method not allowed" }, 405);
@@ -20,6 +20,7 @@ export default async function handler(request, response) {
       if (!active) throw new Error("This session is no longer active");
       const currentRevision = Number(active.workspace.revision || 0), baseRevision = Number(body.baseRevision || 0);
       if (!body.force && baseRevision !== currentRevision) { conflict = { state:active.workspace.state, revision:currentRevision, updatedAt:active.workspace.updatedAt || null }; return false; }
+      addAutomaticBackup(registry,active.workspace);
       active.workspace.state = body.state;
       active.workspace.revision = currentRevision + 1;
       active.workspace.updatedAt = new Date().toISOString();

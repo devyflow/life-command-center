@@ -1,59 +1,38 @@
-import { createSession, json, readJsonBody, REMEMBERED_SESSION_SECONDS, sameOrigin, sessionCookie, sessionDetails } from "./_auth.mjs";
-import { accountFromSession, createInvite, loadRegistry, publicAccount, setOwnerAccess, updateTester } from "./_workspace.mjs";
+import { createSession, clearedSessionCookie, json, readJsonBody, REMEMBERED_SESSION_SECONDS, sameOrigin, sessionCookie, sessionDetails } from "./_auth.mjs";
+import { accountFromSession, cancelInvite, changePassword, createInvite, createWorkspaceBackup, loadRegistry, publicAccount, regenerateRecoveryCodes, restoreWorkspaceBackup, revokeOtherSessions, revokeSession, setOwnerAccess, updateTester } from "./_workspace.mjs";
 
-function claimsFor(account, workspaceId = account.workspaceId) { return { accountId:account.id, workspaceId, role:account.role, sessionVersion:account.sessionVersion }; }
-function accountPayload(registry, resolved) {
-  const base = { current:publicAccount(resolved.account), workspace:{ id:resolved.workspace.id, name:resolved.workspace.name, isOwn:resolved.workspace.id === resolved.account.workspaceId } };
-  if (resolved.account.role === "owner") base.testers = Object.values(registry.accounts).filter(account => account.role === "tester").map(publicAccount);
+const context=request=>({ip:String(request.headers["x-forwarded-for"]||request.headers["x-real-ip"]||"unknown").split(",")[0].trim(),userAgent:request.headers["user-agent"]||""});
+const claimsFor=(account,workspaceId=account.workspaceId,sessionId=null)=>({accountId:account.id,workspaceId,role:account.role,sessionVersion:account.sessionVersion,sessionId});
+function setCookie(response,session,account,workspaceId,sessionId){const life=session.remembered?REMEMBERED_SESSION_SECONDS:undefined;response.setHeader("set-cookie",sessionCookie(createSession(process.env.ACCESS_SECRET,life,claimsFor(account,workspaceId,sessionId)),session.remembered?REMEMBERED_SESSION_SECONDS:null));}
+const safeBackup=item=>({id:item.id,at:item.at,revision:item.revision,label:item.label});
+function payload(registry,resolved,session){
+  const workspace=resolved.workspace,base={current:publicAccount(resolved.account),workspace:{id:workspace.id,name:workspace.name,isOwn:workspace.id===resolved.account.workspaceId},currentSessionId:session.claims?.sessionId||null,sessions:Object.values(registry.sessions||{}).filter(item=>item.accountId===resolved.account.id&&!item.revokedAt&&Date.parse(item.expiresAt||0)>Date.now()).map(({ipHash,...item})=>item).sort((a,b)=>Date.parse(b.createdAt)-Date.parse(a.createdAt)),recovery:{codesRemaining:(resolved.account.recoveryCodes||[]).length,createdAt:resolved.account.recoveryCodesCreatedAt||null},backups:(workspace.backups||[]).map(safeBackup),health:{status:"healthy",registryBytes:JSON.stringify(registry).length,limitBytes:850000,workspaceUpdatedAt:workspace.updatedAt||null,lastBackupAt:workspace.backups?.[0]?.at||null,revision:Number(workspace.revision||0)}};
+  if(resolved.account.role==="owner"){base.testers=Object.values(registry.accounts).filter(item=>item.role==="tester").map(item=>({...publicAccount(item),updatedAt:registry.workspaces[item.workspaceId]?.updatedAt||null}));base.pendingInvites=registry.invites.filter(item=>!item.usedAt&&Date.parse(item.expiresAt)>Date.now()).map(({tokenHash,...item})=>item);const names=Object.fromEntries(Object.values(registry.accounts).map(item=>[item.id,item.displayName]));base.audit=[...registry.audit].reverse().slice(0,40).map(item=>({...item,actorName:names[item.actorId]||"System",targetName:names[item.targetId]||item.targetId}));}
   return base;
 }
 
-export default async function handler(request, response) {
-  if (!["GET","POST"].includes(request.method)) return json(response, { error:"Method not allowed" }, 405);
-  if (request.method === "POST" && !sameOrigin(request)) return json(response, { error:"Origin rejected" }, 403);
-  const session = sessionDetails(request);
-  if (!session) return json(response, { error:"Sign in required" }, 401);
-  try {
-    const { registry } = await loadRegistry();
-    const body = request.method === "POST" ? await readJsonBody(request) : null, action = body?.action;
-    const actor = session.legacy ? registry.accounts.owner : registry.accounts[session.claims?.accountId];
-    if (action === "return_owner" && actor?.role === "owner" && actor.status === "active" && (session.legacy || Number(actor.sessionVersion) === Number(session.claims?.sessionVersion))) {
-      const lifetime = session.remembered ? REMEMBERED_SESSION_SECONDS : undefined;
-      response.setHeader("set-cookie", sessionCookie(createSession(process.env.ACCESS_SECRET, lifetime, claimsFor(actor)), session.remembered ? REMEMBERED_SESSION_SECONDS : null));
-      return json(response, { ok:true });
-    }
-    const resolved = session.legacy ? { account:registry.accounts.owner, workspace:registry.workspaces.owner } : accountFromSession(registry, session);
-    if (!resolved) return json(response, { error:"This session is no longer active" }, 401);
-    if (request.method === "GET") return json(response, accountPayload(registry, resolved));
-    if (action === "create_invite") {
-      if (resolved.account.role !== "owner") return json(response, { error:"Owner access required" }, 403);
-      const created = await createInvite(resolved.account.id, body.displayName, "tester");
-      return json(response, { ok:true, token:created.token, expiresAt:created.expiresAt });
-    }
-    if (action === "reset_link") {
-      if (resolved.account.role !== "owner") return json(response, { error:"Owner access required" }, 403);
-      const target = registry.accounts[body.accountId];
-      const created = await createInvite(resolved.account.id, target?.displayName, "reset", body.accountId);
-      return json(response, { ok:true, token:created.token, expiresAt:created.expiresAt });
-    }
-    if (action === "switch_workspace") {
-      if (resolved.account.role !== "owner") return json(response, { error:"Owner access required" }, 403);
-      const target = registry.workspaces[body.workspaceId], tester = Object.values(registry.accounts).find(account => account.workspaceId === body.workspaceId);
-      if (!target || !tester || tester.status !== "active" || !tester.ownerAccess) return json(response, { error:"This tester workspace is not available" }, 403);
-      const lifetime = session.remembered ? REMEMBERED_SESSION_SECONDS : undefined;
-      response.setHeader("set-cookie", sessionCookie(createSession(process.env.ACCESS_SECRET, lifetime, claimsFor(resolved.account, target.id)), session.remembered ? REMEMBERED_SESSION_SECONDS : null));
-      return json(response, { ok:true, workspace:{ id:target.id, name:target.name } });
-    }
-    if (["disable","enable","delete"].includes(action)) {
-      if (resolved.account.role !== "owner") return json(response, { error:"Owner access required" }, 403);
-      await updateTester(resolved.account.id, body.accountId, action);
-      return json(response, { ok:true });
-    }
-    if (action === "owner_access") {
-      if (resolved.account.role !== "tester") return json(response, { error:"Tester account required" }, 403);
-      await setOwnerAccess(resolved.account.id, body.allowed === true);
-      return json(response, { ok:true, allowed:body.allowed === true });
-    }
-    return json(response, { error:"Unsupported account action" }, 400);
-  } catch (error) { return json(response, { error:error.message || "Account operation failed" }, 400); }
+export default async function handler(request,response){
+  if(!["GET","POST"].includes(request.method))return json(response,{error:"Method not allowed"},405);
+  if(request.method==="POST"&&!sameOrigin(request))return json(response,{error:"Origin rejected"},403);
+  const session=sessionDetails(request);if(!session)return json(response,{error:"Sign in required"},401);
+  try{
+    const {registry}=await loadRegistry(),body=request.method==="POST"?await readJsonBody(request):null,action=body?.action,actor=session.legacy?registry.accounts.owner:registry.accounts[session.claims?.accountId];
+    if(action==="return_owner"&&actor?.role==="owner"&&actor.status==="active"&&(session.legacy||Number(actor.sessionVersion)===Number(session.claims?.sessionVersion))){setCookie(response,session,actor,actor.workspaceId,session.claims?.sessionId);return json(response,{ok:true});}
+    const resolved=session.legacy?{account:registry.accounts.owner,workspace:registry.workspaces.owner}:accountFromSession(registry,session);if(!resolved)return json(response,{error:"This session is no longer active"},401);
+    if(request.method==="GET")return json(response,payload(registry,resolved,session));
+    if(action==="create_invite"){if(resolved.account.role!=="owner")return json(response,{error:"Owner access required"},403);const made=await createInvite(resolved.account.id,body.displayName,"tester");return json(response,{ok:true,token:made.token,expiresAt:made.expiresAt});}
+    if(action==="reset_link"){if(resolved.account.role!=="owner")return json(response,{error:"Owner access required"},403);const target=registry.accounts[body.accountId],made=await createInvite(resolved.account.id,target?.displayName,"reset",body.accountId);return json(response,{ok:true,token:made.token,expiresAt:made.expiresAt});}
+    if(action==="cancel_invite"){if(resolved.account.role!=="owner")return json(response,{error:"Owner access required"},403);await cancelInvite(resolved.account.id,body.inviteId);return json(response,{ok:true});}
+    if(action==="switch_workspace"){if(resolved.account.role!=="owner")return json(response,{error:"Owner access required"},403);const target=registry.workspaces[body.workspaceId],tester=Object.values(registry.accounts).find(item=>item.workspaceId===body.workspaceId);if(!target||!tester||tester.status!=="active"||!tester.ownerAccess)return json(response,{error:"This tester workspace is not available"},403);setCookie(response,session,resolved.account,target.id,session.claims?.sessionId);return json(response,{ok:true,workspace:{id:target.id,name:target.name}});}
+    if(["disable","enable","delete"].includes(action)){if(resolved.account.role!=="owner")return json(response,{error:"Owner access required"},403);await updateTester(resolved.account.id,body.accountId,action);return json(response,{ok:true});}
+    if(action==="export_tester"){if(resolved.account.role!=="owner")return json(response,{error:"Owner access required"},403);const target=registry.accounts[body.accountId],workspace=target&&registry.workspaces[target.workspaceId];if(!target||target.role!=="tester"||!workspace)throw new Error("Tester account not found.");return json(response,{ok:true,exportedAt:new Date().toISOString(),account:publicAccount(target),state:workspace.state,revision:workspace.revision});}
+    if(action==="owner_access"){if(resolved.account.role!=="tester")return json(response,{error:"Tester account required"},403);await setOwnerAccess(resolved.account.id,body.allowed===true);return json(response,{ok:true,allowed:body.allowed===true});}
+    if(action==="change_password"){const changed=await changePassword(resolved.account.id,body.currentPassword,body.newPassword,context(request));setCookie(response,session,changed.result.account,resolved.workspace.id,changed.result.deviceSession.id);return json(response,{ok:true});}
+    if(action==="generate_recovery_codes"){const made=await regenerateRecoveryCodes(resolved.account.id,body.currentPassword);return json(response,{ok:true,codes:made.result.codes});}
+    if(action==="revoke_session"){const done=await revokeSession(resolved.account.id,body.sessionId,session.claims?.sessionId);if(done.result.revokedCurrent)response.setHeader("set-cookie",clearedSessionCookie());return json(response,{ok:true,revokedCurrent:done.result.revokedCurrent});}
+    if(action==="revoke_other_sessions"){const done=await revokeOtherSessions(resolved.account.id,session.claims?.sessionId);return json(response,{ok:true,count:done.result.count});}
+    if(action==="create_backup"){const made=await createWorkspaceBackup(resolved.account.id,resolved.workspace.id,body.label);return json(response,{ok:true,backup:made.result.backup});}
+    if(action==="restore_backup"){const done=await restoreWorkspaceBackup(resolved.account.id,resolved.workspace.id,body.backupId);return json(response,{ok:true,revision:done.result.revision});}
+    return json(response,{error:"Unsupported account action"},400);
+  }catch(error){return json(response,{error:error.message||"Account operation failed"},400);}
 }

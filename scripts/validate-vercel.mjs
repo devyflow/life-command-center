@@ -38,7 +38,7 @@ const authorized=response();await session(request("GET",{cookie:ownerCookie}),au
 const ownerState=response();await stateHandler(request("GET",{cookie:ownerCookie}),ownerState);assert.equal(json(ownerState).state.tasks[0].title,"Owner task");
 
 const invite=response();await accounts(postWithCookie(ownerCookie,{action:"create_invite",displayName:"Test Friend"}),invite);assert.equal(invite.statusCode,200);const inviteToken=json(invite).token;assert.ok(inviteToken);
-const activated=response();await unlock(post({inviteToken,displayName:"Test Friend",password:"river-calm-focus-2048",ownerAccess:true,stayLoggedIn:true}),activated);assert.equal(activated.statusCode,200);const testerAccessId=json(activated).account.accessId,testerCookie=activated.headers["set-cookie"].split(";")[0];assert.notEqual(testerAccessId,"owner");
+const activated=response();await unlock(post({inviteToken,displayName:"Test Friend",password:"river-calm-focus-2048",ownerAccess:true,stayLoggedIn:true}),activated);assert.equal(activated.statusCode,200);const activationBody=json(activated),testerAccessId=activationBody.account.accessId,testerCookie=activated.headers["set-cookie"].split(";")[0];assert.notEqual(testerAccessId,"owner");assert.equal(activationBody.recoveryCodes.length,8);
 const emptyTester=response();await stateHandler(request("GET",{cookie:testerCookie}),emptyTester);assert.equal(json(emptyTester).state,null);
 const saveTester=response();await stateHandler(request("PUT",{...secureHeaders,cookie:testerCookie},{state:{tasks:[{id:2,title:"Tester task"}],paper:{}},baseRevision:0}),saveTester);assert.equal(saveTester.statusCode,200);
 const ownerStill=response();await stateHandler(request("GET",{cookie:ownerCookie}),ownerStill);assert.equal(json(ownerStill).state.tasks[0].title,"Owner task");
@@ -50,6 +50,13 @@ const revokeSupport=response();await accounts(postWithCookie(testerCookie,{actio
 const ownerBlocked=response();await stateHandler(request("GET",{cookie:switchedCookie}),ownerBlocked);assert.equal(ownerBlocked.statusCode,401);
 const returned=response();await accounts(postWithCookie(switchedCookie,{action:"return_owner"}),returned);assert.equal(returned.statusCode,200);const returnedCookie=returned.headers["set-cookie"].split(";")[0];
 const ownerAfterReturn=response();await stateHandler(request("GET",{cookie:returnedCookie}),ownerAfterReturn);assert.equal(json(ownerAfterReturn).state.tasks[0].title,"Owner task");
+
+const createBackup=response();await accounts(postWithCookie(returnedCookie,{action:"create_backup",label:"Before test restore"}),createBackup);assert.equal(createBackup.statusCode,200);
+const securityPanel=response();await accounts(request("GET",{cookie:returnedCookie}),securityPanel);assert.equal(securityPanel.statusCode,200);assert.ok(json(securityPanel).sessions.length);assert.ok(json(securityPanel).backups.length);assert.equal(json(securityPanel).health.status,"healthy");
+const makeOwnerCodes=response();await accounts(postWithCookie(returnedCookie,{action:"generate_recovery_codes",currentPassword:"test-secret"}),makeOwnerCodes);assert.equal(makeOwnerCodes.statusCode,200);const ownerCodes=json(makeOwnerCodes).codes;assert.equal(ownerCodes.length,8);
+const recovered=response();await unlock(post({recover:true,accessId:"owner",recoveryCode:ownerCodes[0],password:"new-owner-passphrase",stayLoggedIn:true}),recovered);assert.equal(recovered.statusCode,200);const recoveredCookie=recovered.headers["set-cookie"].split(";")[0];
+const recoveredSession=response();await session(request("GET",{cookie:recoveredCookie}),recoveredSession);assert.equal(recoveredSession.statusCode,200);
+const reusedCode=response();await unlock(post({recover:true,accessId:"owner",recoveryCode:ownerCodes[0],password:"another-passphrase"}),reusedCode);assert.equal(reusedCode.statusCode,400);
 
 const app=response();page(request("GET",{cookie:ownerCookie}),app);assert.match(app.body,/Life Command Center/);assert.match(app.body,/accountPanel/);assert.match(app.body,/workspaceBanner/);
 const appSource=await readFile(resolve(import.meta.dirname,"../client/app.js"),"utf8");
