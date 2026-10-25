@@ -14,7 +14,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&family=Newsreader:ital,opsz,wght@1,6..72,500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=workspace-v11">
+  <link rel="stylesheet" href="styles.css?v=workspace-v12">
 </head>
 <body>
   <div class="grain" aria-hidden="true"></div>
@@ -123,7 +123,7 @@
           <summary><div><span>•••</span><b>Focus, repetition and Paper marks</b></div><small>Optional settings</small></summary>
           <div class="capture-more-body">
             <div class="form-grid capture-repeat-grid"><label>Repeat<select id="taskRepeat"><option value="none">Does not repeat</option><option value="daily">Every day</option><option value="weekly">Every week</option><option value="monthly">Every month</option></select></label></div>
-            <div class="capture-marks capture-mark-guide"><span>Task signals</span><label><input id="taskCircle" type="checkbox"><i>◯</i><b>Important</b><small>Keep it visible in priority filters</small></label><label><input id="taskReady" type="checkbox"><i>✓</i><b>Ready to act</b><small>The next action is clear</small></label><label><input id="taskBox" type="checkbox"><i>□</i><b>Protect time</b><small>Defend its scheduled block</small></label><label><input id="taskStar" type="checkbox"><i>★</i><b>Today focus</b><small>Highlight it for today</small></label></div>
+            <div class="capture-marks capture-mark-guide"><span>Task signals</span><label><input id="taskCircle" type="checkbox"><i>◯</i><b>Important</b><small>Keep it visible in priority filters</small></label><label><input id="taskReady" type="checkbox"><i>✓</i><b>Ready to act</b><small>The next action is clear</small></label><label><input id="taskBox" type="checkbox"><i>□</i><b>Protect time</b><small>Defend its scheduled block</small></label><label><input id="taskStar" type="checkbox"><i>★</i><b>Today focus</b><small>Highlight it for today</small></label><label><input id="taskWeek" type="checkbox"><i>◆</i><b>This week</b><small>Keep it visible through this week</small></label></div>
             <div class="choice-row"><label><input id="taskTimer" type="checkbox" checked> Add focus timer</label><label><input id="taskPublish" type="checkbox"> Show on shared calendar</label><label><input id="taskCalendar" type="checkbox"> Add to calendar when scheduled</label></div>
           </div>
         </details>
@@ -295,7 +295,7 @@
   <aside class="update-nudge" id="updateNudge" aria-live="polite" hidden><span>↻</span><div><b>A fresher version is ready</b><small>Restart to load interface improvements. Your saved work is safe.</small></div><button id="applyUpdate" type="button">Restart</button><button id="dismissUpdate" class="bare" type="button" aria-label="Dismiss update">×</button></aside>
   <div class="toast" id="toast" role="status" aria-live="polite"><span>✓</span><div><b id="toastTitle">Saved</b><small id="toastText">Your change is ready.</small></div><button id="toastAction" type="button" hidden>Undo</button></div>
   <div class="xp-burst" id="xpBurst"><span>✦</span><b id="xpBurstValue">+10 XP</b><small id="xpBurstText">Momentum earned</small></div>
-  <script src="app.js?v=workspace-v11"></script>
+  <script src="app.js?v=workspace-v12"></script>
   <script type="module" src="scene.js?v=workspace-v7"></script>
 </body>
 </html>
