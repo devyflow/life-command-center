@@ -61,7 +61,7 @@ const STORE_BASE = 'life-command-v4';
 const clone = obj => JSON.parse(JSON.stringify(obj));
 let activeStoreKey = null;
 let state = clone(seed);
-let ui = { view: 'today', space: null, category: null, planningDate: iso(), rescueId: null, timer: null, taskFilter: 'open', requestFilter: 'pending', plannerSelected: null, boardId: 'workstation', boardNoteId: null, boardMenuId: null, libraryId: null, libraryFilter: 'active', libraryQuery: '' };
+let ui = { view: 'today', space: null, category: null, planningDate: iso(), rescueId: null, timer: null, taskFilter: 'open', requestFilter: 'pending', plannerSelected: null, completionTaskId:null, completionMode:'complete', boardId: 'workstation', boardNoteId: null, boardMenuId: null, libraryId: null, libraryFilter: 'active', libraryQuery: '' };
 const CANVAS_VIEW_STORE='life-command-canvas-view-v1';
 let canvasView={paper:{locked:true,zoom:LIGHTWEIGHT_MODE?'fit':1},board:{locked:true,zoom:LIGHTWEIGHT_MODE?'fit':1}};
 try{const saved=JSON.parse(localStorage.getItem(CANVAS_VIEW_STORE)||'{}');['paper','board'].forEach(kind=>{if(saved[kind]?.zoom==='fit'||Number.isFinite(Number(saved[kind]?.zoom)))canvasView[kind].zoom=saved[kind].zoom==='fit'?'fit':Math.max(.25,Math.min(1.4,Number(saved[kind].zoom)));});}catch{}
@@ -109,7 +109,7 @@ function normalizeStateShape() {
     if(!area){area={name:task.area||'Unsorted',color:'#9cbe52',categories:[]};state.taxonomy.push(area);}
     if(task.category&&!area.categories.includes(task.category))area.categories.push(task.category);
   });
-  state.tasks.forEach(task => { task.paperMarks ||= { circle: task.paperEmphasis === 'circle', tick: false, box: task.paperEmphasis === 'box', star: task.paperEmphasis === 'star' }; task.repeat ||= 'none'; task.rewardProgress = Math.max(Number(task.rewardProgress) || 0, Number(task.progress) || 0); });
+  state.tasks.forEach(task => { task.paperMarks ||= { circle: task.paperEmphasis === 'circle', tick: false, box: task.paperEmphasis === 'box', star: task.paperEmphasis === 'star' }; task.repeat ||= 'none'; task.rewardProgress = Math.max(Number(task.rewardProgress) || 0, Number(task.progress) || 0);task.progressLocked=task.progressLocked!==false;task.completionHistory=Array.isArray(task.completionHistory)?task.completionHistory:[];if(task.progress>=100&&!task.completedAt)task.completedAt=task.updatedAt||null;if(task.progress<100)task.completedAt=null; });
   const taskIds=new Set(state.tasks.map(task=>task.id)),libraryIds=new Set(state.library.map(item=>item.id));
   state.library.forEach(item=>{if(item.taskId&&!taskIds.has(item.taskId))delete item.taskId;});
   state.tasks.forEach(task=>{if(task.sourceLibraryId&&!libraryIds.has(task.sourceLibraryId))delete task.sourceLibraryId;if(Array.isArray(task.sourceLibraryIds))task.sourceLibraryIds=task.sourceLibraryIds.filter(id=>libraryIds.has(id));});
@@ -339,12 +339,13 @@ function matchesTaskFilter(task) {
   return true;
 }
 function taskFilterBar() {
-  const filters = [['open','Open'],['all','Everything'],['circle','◯ Important'],['tick','✓ Ready'],['not-circle','Not circled'],['not-tick','Not ticked'],['completed','Completed'],['under-5','Under 5%']];
+  const completed=state.tasks.filter(task=>task.progress>=100).length;
+  const filters = [['open','Open'],['all','Everything'],['circle','◯ Important'],['tick','✓ Ready'],['not-circle','Not circled'],['not-tick','Not ticked'],['completed',`Completed history${completed?` (${completed})`:''}`],['under-5','Under 5%']];
   return `<div class="task-filter-bar" aria-label="Task filters">${filters.map(([key,label])=>`<button class="filter-chip ${ui.taskFilter===key?'active':''}" data-task-filter="${key}">${label}</button>`).join('')}</div>`;
 }
 function taskMarkButtons(task, paper = false) {
   const marks = [['circle','◯','Important'],['tick','✓','Ready to act'],['box','□','Protected time'],['star','★','Today focus']];
-  return `<div class="${paper?'paper-marks':'task-marks'}">${marks.map(([key,icon,label])=>`<button class="${hasMark(task,key)?'active':''}" data-task-mark="${key}" data-task-mark-id="${task.id}" title="${label}" aria-label="${label}" aria-pressed="${hasMark(task,key)}">${icon}</button>`).join('')}</div>`;
+  return `<div class="${paper?'paper-marks':'task-marks'}">${marks.map(([key,icon,label])=>`<button class="${hasMark(task,key)?'active':''}" data-task-mark="${key}" data-task-mark-id="${task.id}" title="${label}" aria-label="${label}" aria-pressed="${hasMark(task,key)}">${icon}${paper?'':`<span>${label}</span>`}</button>`).join('')}</div>`;
 }
 
 const MOMENTUM_MILESTONES = [
@@ -427,13 +428,15 @@ function setProductive() {
 
 function taskCard(task) {
   const done = task.progress >= 100;
+  const progressLocked=task.progressLocked!==false;
   const order = state.paper.sequence.indexOf(task.id);
   const marked = Object.values(task.paperMarks || {}).some(Boolean);
   return `<article class="task-row ${done ? 'done' : ''} ${marked ? 'paper-important' : ''}" data-task="${task.id}">
-    <button class="task-check" data-action="complete" aria-label="${done ? 'Mark incomplete' : 'Complete task'}">${done ? '✓' : ''}</button>
+    <button class="task-check" data-action="complete" aria-label="${done ? 'Review or restore completed task' : 'Review before completing task'}">${done ? '✓' : ''}</button>
     <div><div class="task-title">${esc(task.title)}</div><div class="task-meta"><span class="mini-dot" style="background:${color(task.area)}"></span>${esc(task.area)} / ${esc(task.category)} · ${duration(task.duration)} <span class="energy">${task.energy}</span>${task.start ? ` · ${clock(mins(task.start))}` : ''}${task.repeat&&task.repeat!=='none'?` · repeats ${task.repeat}`:''}${order>=0?` <span class="paper-order">Paper #${order+1}</span>`:''}</div>${taskMarkButtons(task)}</div>
     <div class="task-side"><button class="icon-action" data-action="edit" title="Edit task" aria-label="Edit ${esc(task.title)}">✎</button><button class="icon-action" data-action="timer" title="Start timer" aria-label="Start focus timer for ${esc(task.title)}">◷</button><button class="icon-action" data-action="calendar" title="Export calendar event" aria-label="Export ${esc(task.title)} to calendar">▣</button><button class="icon-action" data-action="publish" title="${task.publish ? 'Remove from shared calendar' : 'Show on shared calendar'}" aria-label="${task.publish ? 'Remove from shared calendar' : 'Show on shared calendar'}">${task.publish ? '●' : '○'}</button></div>
-    <label class="progress-line"><input type="range" min="0" max="100" step="5" value="${task.progress}" data-progress><span>${task.progress}%</span></label>
+    <div class="progress-line ${progressLocked?'is-locked':''}"><button type="button" class="progress-lock" data-progress-lock="${task.id}" aria-pressed="${progressLocked}" title="${progressLocked?'Unlock progress for one change':'Lock progress'}">${progressLocked?'🔒':'🔓'}<span>${progressLocked?'Locked':'Adjust'}</span></button><input aria-label="Progress for ${esc(task.title)}" type="range" min="0" max="100" step="5" value="${task.progress}" data-progress ${progressLocked?'disabled':''}><span>${task.progress}%</span></div>
+    ${done?`<div class="completion-record"><div><b>${task.completedAt?`Completed ${new Date(task.completedAt).toLocaleString()}`:'Completed · time unavailable'}</b><small>Previous progress: ${Number(task.progressBeforeCompletion)||0}% · saved in completion history</small></div><button type="button" data-restore-task="${task.id}">Restore task</button></div>`:''}
     ${task.next ? `<div class="next-step">Next: ${esc(task.next)}</div>` : ''}
   </article>`;
 }
@@ -718,21 +721,33 @@ function nextRecurringDate(task) {
 function spawnRecurringTask(task) {
   if (!task.repeat || task.repeat === 'none' || task.recurrenceSpawned) return;
   task.recurrenceSpawned = true;
-  const next = { ...clone(task), id:uid(), date:nextRecurringDate(task), progress:0, rewardProgress:0, replanRewarded:false, recurrenceSpawned:false, createdAt:new Date().toISOString(), updatedAt:new Date().toISOString() };
+  const next = { ...clone(task), id:uid(), date:nextRecurringDate(task), progress:0, rewardProgress:0, replanRewarded:false, recurrenceSpawned:false,completedAt:null,progressBeforeCompletion:0,completionHistory:[],progressLocked:true, createdAt:new Date().toISOString(), updatedAt:new Date().toISOString() };
   state.tasks.push(next);
   toast('Next recurring task created', `${next.title} is scheduled for ${dateLabel(next.date)}.`);
 }
-function updateProgress(id, value) {
+function updateProgress(id, value, {confirmed=false}={}) {
   const task = state.tasks.find(t => t.id === id); if (!task) return;
-  const old = Number(task.progress)||0, previousBest = Math.max(Number(task.rewardProgress)||0,old);
-  task.progress = Math.max(0,Math.min(100,Number(value)||0));
+  const old = Number(task.progress)||0,next=Math.max(0,Math.min(100,Number(value)||0));
+  if(next===100&&old<100&&!confirmed){requestTaskCompletion(task);return;}
+  const previousBest = Math.max(Number(task.rewardProgress)||0,old);
+  task.progress = next;
   const crossed = Math.floor(task.progress / 25) - Math.floor(previousBest / 25);
   task.rewardProgress = Math.max(previousBest,task.progress);
   if (task.progress > previousBest) setProductive();
   if (crossed > 0) reward(crossed * 10 + (task.progress === 100 ? 20 : 0), task.progress === 100 ? 'Completion with context preserved' : 'Honest progress counts');
-  if (task.progress === 100 && old < 100) { spawnRecurringTask(task); if(!task.repeat||task.repeat==='none')toast('Task complete', 'Your remaining workload has been recalculated.'); }
+  if (task.progress === 100 && old < 100) {const at=new Date().toISOString();task.progressBeforeCompletion=old;task.completedAt=at;task.progressLocked=true;task.completionHistory||=[];task.completionHistory.push({at,action:'completed',from:old,to:100});spawnRecurringTask(task);if(!task.repeat||task.repeat==='none')toast('Task completed','Its time and previous progress were saved.',{label:'Restore',run:()=>restoreTaskCompletion(task.id)});}
+  if(task.progress<100&&old===100){const at=new Date().toISOString();task.completionHistory||=[];task.completionHistory.push({at,action:'restored',from:100,to:task.progress});task.completedAt=null;task.progressLocked=true;}
   save(); render();
 }
+function requestTaskCompletion(task){
+  if(!task)return;ui.completionTaskId=task.id;ui.completionMode='complete';$('#completionEyebrow').textContent='CHECK BEFORE COMPLETING';$('#completionTitle').textContent='Mark this task complete?';$('#completionSymbol').textContent='✓';$('#completionTaskName').textContent=task.title;$('#completionTaskMeta').textContent=`Current progress: ${task.progress}% · ${task.area} / ${task.category}`;$('#completionCopy').textContent='This moves the task into Completed history. You can restore it later with its previous progress.';$('#completionHint').textContent='Use the Completed history filter to review or restore it.';$('#completionCancel').textContent='Keep working';$('#completionConfirm').textContent='Mark complete';openModal('completionModal');
+}
+function requestTaskRestoration(task){
+  if(!task)return;ui.completionTaskId=task.id;ui.completionMode='restore';$('#completionEyebrow').textContent='RECOVER COMPLETED TASK';$('#completionTitle').textContent='Restore this task?';$('#completionSymbol').textContent='↺';$('#completionTaskName').textContent=task.title;$('#completionTaskMeta').textContent=task.completedAt?`Completed ${new Date(task.completedAt).toLocaleString()}`:'Completion time unavailable';$('#completionCopy').textContent=`The task will return to Open at ${Number(task.progressBeforeCompletion)||0}% progress.`;$('#completionHint').textContent='Its completion record will remain in the task history.';$('#completionCancel').textContent='Keep completed';$('#completionConfirm').textContent='Restore task';openModal('completionModal');
+}
+function restoreTaskCompletion(id){const task=state.tasks.find(item=>item.id===id);if(!task)return;updateProgress(task.id,Number(task.progressBeforeCompletion)||0,{confirmed:true});toast('Task restored',`Returned to ${task.progress}% progress. Its completion record was kept.`);}
+function cancelCompletionReview(){ui.completionTaskId=null;ui.completionMode='complete';closeModal('completionModal');render();}
+function confirmCompletionReview(){const task=state.tasks.find(item=>item.id===ui.completionTaskId),mode=ui.completionMode;ui.completionTaskId=null;ui.completionMode='complete';closeModal('completionModal',false);if(!task)return;if(mode==='restore')restoreTaskCompletion(task.id);else updateProgress(task.id,100,{confirmed:true});}
 function startTimer(task) {
   if (timerHandle) clearInterval(timerHandle);
   ui.timer = { taskId: task.id, remaining: Math.max(60, Math.round(task.duration * 60 * (1 - task.progress / 100))), running: true };
@@ -1118,8 +1133,10 @@ document.addEventListener('click', event => {
   const searchBoard=event.target.closest('[data-search-board]');if(searchBoard){const note=state.boardNotes.find(item=>item.id===Number(searchBoard.dataset.searchBoard));if(note)ui.boardId=note.boardId;closeModal('searchModal');setView('board');return;}
   const searchLibrary=event.target.closest('[data-search-library]');if(searchLibrary){const item=state.library.find(entry=>entry.id===Number(searchLibrary.dataset.searchLibrary));ui.libraryQuery=item?.title||'';ui.libraryFilter='all';closeModal('searchModal');setView('library');return;}
   const taskMark=event.target.closest('[data-task-mark]');if(taskMark){const task=state.tasks.find(t=>t.id===Number(taskMark.dataset.taskMarkId));if(task){task.paperMarks||={circle:false,tick:false,box:false,star:false};const mark=taskMark.dataset.taskMark;task.paperMarks[mark]=!task.paperMarks[mark];save();render();toast(task.paperMarks[mark]?`${taskMark.title} marked`:`${taskMark.title} removed`,'The mark changed on both Paper and Tasks.');}return;}
+  const progressLock=event.target.closest('[data-progress-lock]');if(progressLock){const task=state.tasks.find(item=>item.id===Number(progressLock.dataset.progressLock));if(task){task.progressLocked=task.progressLocked===false;save();render();toast(task.progressLocked?'Progress locked':'Progress unlocked',task.progressLocked?'The slider cannot move accidentally.':'Make one adjustment; it will lock again automatically.');}return;}
+  const restoreTask=event.target.closest('[data-restore-task]');if(restoreTask){const task=state.tasks.find(item=>item.id===Number(restoreTask.dataset.restoreTask));if(task)requestTaskRestoration(task);return;}
   const paperEdit=event.target.closest('[data-paper-edit]');if(paperEdit){const task=state.tasks.find(t=>t.id===Number(paperEdit.dataset.paperEdit));if(task)openTaskEditor(task);return;}
-  const paperComplete=event.target.closest('[data-paper-complete]');if(paperComplete){const task=state.tasks.find(t=>t.id===Number(paperComplete.dataset.paperComplete));if(task)updateProgress(task.id,task.progress>=100?0:100);return;}
+  const paperComplete=event.target.closest('[data-paper-complete]');if(paperComplete){const task=state.tasks.find(t=>t.id===Number(paperComplete.dataset.paperComplete));if(task)task.progress>=100?requestTaskRestoration(task):requestTaskCompletion(task);return;}
   const paperMode=event.target.closest('[data-paper-mode]');if(paperMode){if(!requireCanvasEditing('paper'))return;const [kind,idText]=paperMode.dataset.paperMode.split(':'),id=Number(idText);if(kind==='task'){const task=state.tasks.find(item=>item.id===id),visible=state.tasks.filter(matchesTaskFilter),current=state.paper.layout[id]||paperPlan(visible).positions.get(id)||{x:72,y:142};state.paper.layout[id]={...current,unit:'px',mode:current.mode==='float'?'placed':'float',z:Number(current.z)||5};}else{const note=state.paper.texts.find(item=>item.id===id);if(note)note.mode=note.mode==='float'?'placed':'float';}save();render();toast(kind==='task'?(state.paper.layout[id].mode==='float'?'Task can float':'Task returned to guided placement'):'Text placement updated','Guided items avoid collisions. Floating items may overlap deliberately.');return;}
   const paperLayer=event.target.closest('[data-paper-layer]');if(paperLayer){if(!requireCanvasEditing('paper'))return;const note=state.paper.texts.find(item=>item.id===Number(paperLayer.dataset.paperLayer));if(note){const layers=[...Object.values(state.paper.layout),...state.paper.texts];note.z=Math.max(5,...layers.map(item=>Number(item.z)||0))+1;save();render();}return;}
   const paperRotate=event.target.closest('[data-paper-rotate]');if(paperRotate){if(!requireCanvasEditing('paper'))return;const note=state.paper.texts.find(item=>item.id===Number(paperRotate.dataset.paperRotate));if(note){note.rotation=(Number(note.rotation)||0)>=4?-3:(Number(note.rotation)||0)+2;save();render();}return;}
@@ -1130,7 +1147,7 @@ document.addEventListener('click', event => {
   const taskEl = event.target.closest('[data-task]');
   if (taskEl) {
     const task = state.tasks.find(t => t.id === Number(taskEl.dataset.task)); if (!task) return;
-    if (event.target.closest('[data-action="complete"]')) updateProgress(task.id, task.progress >= 100 ? 0 : 100);
+    if (event.target.closest('[data-action="complete"]')) task.progress>=100?requestTaskRestoration(task):requestTaskCompletion(task);
     else if (event.target.closest('[data-action="edit"]')) openTaskEditor(task);
     else if (event.target.closest('[data-action="timer"]')) startTimer(task);
     else if (event.target.closest('[data-action="calendar"]')) exportICS(task);
@@ -1181,7 +1198,7 @@ document.addEventListener('input', event => {
   if(event.target.matches('[data-scan-text]')){const item=scanRuntime.candidates.find(x=>x.id===Number(event.target.dataset.scanText));if(item)item.text=event.target.value;updateScanSelection();}
 });
 document.addEventListener('change', event => {
-  if (event.target.matches('[data-progress]')) updateProgress(Number(event.target.closest('[data-task]').dataset.task), event.target.value);
+  if (event.target.matches('[data-progress]')){const task=state.tasks.find(item=>item.id===Number(event.target.closest('[data-task]').dataset.task));if(!task)return;if(task.progressLocked!==false){render();toast('Progress is locked','Unlock it before moving the slider.');return;}task.progressLocked=true;updateProgress(task.id,event.target.value);}
   if(event.target.matches('[data-scan-include]')){const item=scanRuntime.candidates.find(x=>x.id===Number(event.target.dataset.scanInclude));if(item)item.included=event.target.checked;event.target.closest('.scan-candidate')?.classList.toggle('excluded',!event.target.checked);renderScanRegions();updateScanSelection();}
   if(event.target.matches('[data-scan-kind]')){const item=scanRuntime.candidates.find(x=>x.id===Number(event.target.dataset.scanKind));if(item)item.kind=event.target.value;}
   if(event.target.matches('[data-scan-important]')){const item=scanRuntime.candidates.find(x=>x.id===Number(event.target.dataset.scanImportant));if(item)item.important=event.target.checked;}
@@ -1262,6 +1279,9 @@ $$('[data-cancel-taxonomy]').forEach(button=>button.addEventListener('click',clo
 $('#newTaskCategoryName').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();addTaskCategoryFromCapture();}});
 $('#newTaskSubcategoryName').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();addTaskSubcategoryFromCapture();}});
 $('#taskPlan').addEventListener('change',updateTaskPlanFields);
+$('#completionConfirm').addEventListener('click',confirmCompletionReview);
+$('#completionCancel').addEventListener('click',cancelCompletionReview);
+$('#completionClose').addEventListener('click',cancelCompletionReview);
 $('#boardForm').addEventListener('submit',event=>{event.preventDefault();const board={id:`board-${uid()}`,name:$('#boardName').value.trim(),theme:$('#boardTheme').value,createdAt:new Date().toISOString()};if(!board.name)return;state.boards.push(board);ui.boardId=board.id;save();closeModal('boardModal');render();toast('Board created','A new visual space is ready for your thoughts.');});
 $('#boardNoteForm').addEventListener('submit',event=>{event.preventDefault();const date=$('#boardNoteDate').value,time=$('#boardNoteTime').value||'09:00',values={type:$('#boardNoteType').value,text:$('#boardNoteText').value.trim(),color:$('#boardNoteColor').value,source:$('#boardNoteSource').value.trim(),showGlance:$('#boardNoteGlance').checked,popup:$('#boardNotePopup').checked,notifyAt:date?new Date(`${date}T${time}:00`).toISOString():null,updatedAt:new Date().toISOString()};if(!values.text)return;const existing=state.boardNotes.find(note=>note.id===ui.boardNoteId);if(existing)Object.assign(existing,values);else{const peers=state.boardNotes.filter(note=>note.boardId===activeBoard().id&&!note.archived),index=peers.length;state.boardNotes.push({id:uid(),boardId:activeBoard().id,x:45+(index%4)*275,y:70+Math.floor(index/4)*220,w:210,h:175,rotation:(index%3-1)*1.2,z:Math.max(1,...state.boardNotes.map(note=>Number(note.z)||0))+1,float:false,locked:false,archived:false,createdAt:new Date().toISOString(),...values});}save();ui.boardNoteId=null;closeModal('boardNoteModal');render();toast(existing?'Board note updated':'Pinned to your board',values.showGlance?'It can also appear in Glance around the app.':'It will stay on this board.');});
 $('#boardNoteDelete').addEventListener('click',()=>{if(!ui.boardNoteId)return;const index=state.boardNotes.findIndex(note=>note.id===ui.boardNoteId),removed=clone(state.boardNotes[index]);state.boardNotes.splice(index,1);ui.boardNoteId=null;save();closeModal('boardNoteModal');render();toast('Board note removed','It can be restored for the next few seconds.',{label:'Undo',run:()=>{if(!state.boardNotes.some(note=>note.id===removed.id))state.boardNotes.splice(Math.max(0,index),0,removed);save();render();toast('Board note restored');}});});
@@ -1273,7 +1293,7 @@ $('#taskForm').addEventListener('submit', event => {
   const sourceCapture=captureSourceRuntime.title?{kind:captureSourceRuntime.kind,url:captureSourceRuntime.url||'',title:captureSourceRuntime.title,description:captureSourceRuntime.description||'',siteName:captureSourceRuntime.siteName||''}:existing?.sourceCapture||null;
   const values={title:$('#taskTitle').value.trim(),area:$('#taskArea').value,category:$('#taskCategory').value,duration:Number($('#taskDuration').value),energy:$('#taskEnergy').value,plan,date:plan==='inbox'?null:date,start:plan==='fixed'?$('#taskStart').value:null,windowStart:$('#taskStart').value,windowEnd:$('#taskEnd').value,decideBy:$('#decideBy').value||iso(),next:$('#taskNext').value.trim(),timer:$('#taskTimer').checked,publish:$('#taskPublish').checked,publicTitle:'Focused work',calendar:$('#taskCalendar').checked,repeat:$('#taskRepeat').value,paperMarks:{circle:$('#taskCircle').checked,tick:$('#taskReady').checked,box:$('#taskBox').checked,star:$('#taskStar').checked},sourceCapture,sourceLibraryId:captureSourceRuntime.libraryId||existing?.sourceLibraryId||null,updatedAt:new Date().toISOString()};
   if(existing){Object.assign(existing,values);toast('Task updated','Paper, planner and task views now use the changes.');}
-  else{state.tasks.unshift({id:uid(),progress:0,postponed:0,createdAt:new Date().toISOString(),...values});reward(5,'Your mind can release the task');toast('Captured','The task is safely in your command center and cloud.');}
+  else{state.tasks.unshift({id:uid(),progress:0,progressLocked:true,completionHistory:[],postponed:0,createdAt:new Date().toISOString(),...values});reward(5,'Your mind can release the task');toast('Captured','The task is safely in your command center and cloud.');}
   save(); ui.editTaskId=null; closeModal('taskModal'); render();
 });
 $('#taskDelete').addEventListener('click',()=>{const id=ui.editTaskId;if(!id)return;const index=state.tasks.findIndex(task=>task.id===id),removed=clone(state.tasks[index]),layout=clone(state.paper.layout[id]||null),sequenceIndex=state.paper.sequence.indexOf(id),libraryLinks=state.library.filter(item=>item.taskId===id).map(item=>({id:item.id,status:item.status}));libraryLinks.forEach(link=>{const item=state.library.find(entry=>entry.id===link.id);delete item.taskId;if(item.status==='using')item.status='ready';});state.tasks.splice(index,1);delete state.paper.layout[id];state.paper.sequence=state.paper.sequence.filter(x=>x!==id);ui.editTaskId=null;save();closeModal('taskModal');render();toast('Task deleted','It was removed from Paper and its Knowledge links were released.',{label:'Undo',run:()=>{if(!state.tasks.some(task=>task.id===id))state.tasks.splice(Math.max(0,index),0,removed);if(layout)state.paper.layout[id]=layout;if(sequenceIndex>=0&&!state.paper.sequence.includes(id))state.paper.sequence.splice(sequenceIndex,0,id);libraryLinks.forEach(link=>{const item=state.library.find(entry=>entry.id===link.id);if(item){item.taskId=id;item.status=link.status;}});save();render();toast('Task restored','Its Paper position, details and Knowledge links are back.');}});});
@@ -1281,11 +1301,11 @@ $('#freeForm').addEventListener('submit',event=>{event.preventDefault();state.av
 $('#timerToggle').addEventListener('click',()=>{if(!ui.timer)return;ui.timer.running=!ui.timer.running;$('#timerToggle').textContent=ui.timer.running?'Ⅱ':'▶';});
 $('#timerStop').addEventListener('click',finishTimer); $('#timerClose').addEventListener('click',closeTimer);
 $('#resetBtn').addEventListener('click',()=>{state=clone(seed);state.tasks.forEach(task=>{task.paperMarks={circle:false,tick:false,box:false,star:false};task.repeat='none';});state.paper={title:'Everything on my mind',strokes:[],shapes:[],texts:[{id:9001,x:7.5,y:11.5,text:'Do what matters. Leave room to breathe.',type:'note'}],layout:{},sequence:[],imports:[]};state.preferences={reminders:false,reminderLead:10,notified:{}};normalizeStateShape();save();ui={view:'today',space:null,category:null,planningDate:iso(),rescueId:null,timer:null,taskFilter:'open',requestFilter:'pending',plannerSelected:null,boardId:'workstation',boardNoteId:null,boardMenuId:null,libraryId:null,libraryFilter:'active',libraryQuery:''};closeTimer();render();updateReminderUI();toast('Demo restored','All sample data is back.');});
-$$('.modal-layer').forEach(layer=>layer.addEventListener('click',e=>{if(e.target===layer)closeModal(layer.id);}));
+$$('.modal-layer').forEach(layer=>layer.addEventListener('click',e=>{if(e.target!==layer)return;if(layer.id==='completionModal')cancelCompletionReview();else closeModal(layer.id);}));
 document.addEventListener('keydown',e=>{
   const typing=['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName),openLayer=$('.modal-layer.open');
   if(e.key==='Tab'&&openLayer){const focusable=$$('button:not([disabled]),[href],input:not([disabled]):not([type="hidden"]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])',openLayer).filter(el=>!el.hidden&&el.offsetParent!==null);if(focusable.length){const first=focusable[0],last=focusable.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}}}
-  if((e.key==='c'||e.key==='C')&&!typing&&!openLayer)openTaskEditor();if(e.key==='/'&&!typing&&!openLayer){e.preventDefault();openSearch();}if(e.key==='Escape'&&openLayer)closeModal(openLayer.id);else if(e.key==='Escape'&&document.body.classList.contains('focus-mode'))setFocusMode(false);
+  if((e.key==='c'||e.key==='C')&&!typing&&!openLayer)openTaskEditor();if(e.key==='/'&&!typing&&!openLayer){e.preventDefault();openSearch();}if(e.key==='Escape'&&openLayer){if(openLayer.id==='completionModal')cancelCompletionReview();else closeModal(openLayer.id);}else if(e.key==='Escape'&&document.body.classList.contains('focus-mode'))setFocusMode(false);
 });
 
 const now=new Date();$('#dateDay').textContent=now.getDate();$('#dateMonth').textContent=now.toLocaleDateString('en-US',{month:'short'}).toUpperCase();$('#taskDate').value=iso();$('#taskDate').min=iso();$('#decideBy').value=iso();$('#freeDate').value=iso(addDays(1));$('#freeDate').min=iso();populateAreaSelect($('#taskArea'));setTaskCategories($('#taskArea').value);populateAreaSelect($('#scanArea'));

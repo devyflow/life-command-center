@@ -44,7 +44,7 @@ assert.equal(read('state.profile.xp'),900,'A sub-milestone progress change gives
 run('updateProgress(1,25);updateProgress(1,0);updateProgress(1,25)');
 assert.equal(read('state.profile.xp'),910,'The same progress milestone pays only once');
 assert.equal(read('state.profile.streak'),7,'A day counts only once');
-run('updateProgress(1,100);updateProgress(1,0);updateProgress(1,100)');
+run('updateProgress(1,100,{confirmed:true});updateProgress(1,0);updateProgress(1,100,{confirmed:true})');
 assert.equal(read('state.profile.xp'),960,'Completion can only be rewarded once');
 run('state.tasks[0].repeat="daily";spawnRecurringTask(state.tasks[0])');
 assert.equal(read('state.tasks[1].rewardProgress'),0,'A recurring copy starts with fresh progress credit');
@@ -60,6 +60,18 @@ assert.equal(read('state.profile.streak'),0);
 assert.deepEqual(read('earnedBadges()'),badges,'Resetting productive days keeps earned badges');
 run('state.profile={xp:0,streak:0,bestStreak:0,sessions:0,accuratePlans:0,boundaries:0}');
 assert.equal(read('earnedBadges().filter(b=>b.earned).length'),0,'New users see no invented achievements');
+
+reset();
+run('updateProgress(1,100)');
+assert.equal(read('state.tasks[0].progress'),0,'Completion waits for explicit confirmation');
+assert.equal(read('ui.completionTaskId'),1,'The confirmation dialog remembers the intended task');
+run('confirmCompletionReview()');
+assert.equal(read('state.tasks[0].progress'),100,'Confirmed completion marks the task done');
+assert.ok(read('state.tasks[0].completedAt'),'Completion records the exact time');
+assert.equal(read('state.tasks[0].progressLocked'),true,'Completed progress is locked');
+run('restoreTaskCompletion(1)');
+assert.equal(read('state.tasks[0].progress'),0,'A completed task can recover its previous progress');
+assert.deepEqual(read('state.tasks[0].completionHistory.map(item=>item.action)'),['completed','restored'],'Completion and recovery remain auditable');
 
 reset();
 run(`document.querySelector('#newTaskCategoryName').value='Business';addTaskCategoryFromCapture()`);
@@ -141,7 +153,7 @@ const manifest=JSON.parse(await readFile(new URL('../client/manifest.webmanifest
 assert.equal(manifest.share_target.action,'/?share-target=1','Installed app can receive shared links');
 const serviceWorker=await readFile(new URL('../client/sw.js',import.meta.url),'utf8');
 assert.match(serviceWorker,/periodicsync/,'Supporting installed browsers can check reminders in the background');
-assert.match(serviceWorker,/life-command-static-v16/,'A new cache generation ships account-safe app assets');
+assert.match(serviceWorker,/life-command-static-v17/,'A new cache generation ships account-safe app assets');
 assert.match(serviceWorker,/freshAsset/,'JavaScript and CSS check the network before using stale cache');
 const page=await readFile(new URL('../client/index.html',import.meta.url),'utf8');
 const stylesheet=await readFile(new URL('../client/styles.css',import.meta.url),'utf8');
@@ -151,6 +163,10 @@ assert.match(page,/data-task-plan-choice="fixed"/,'Task capture provides a direc
 assert.match(page,/class="capture-more-options"/,'Optional capture settings stay available without crowding the main flow');
 assert.match(page,/id="showTaskCategoryCreator"/,'Task capture can create a category without leaving the form');
 assert.match(page,/id="showTaskSubcategoryCreator"/,'Task capture can create a subcategory without leaving the form');
+assert.match(page,/id="completionModal"/,'Task completion uses a deliberate confirmation dialog');
+assert.match(source,/data-progress-lock="\$\{task\.id\}"/,'Every task card has its own progress lock');
+assert.match(source,/class="completion-record"/,'Completed tasks show their completion record and recovery control');
+assert.match(stylesheet,/\.task-capture-form\{min-height:0;overflow-y:auto/,'The add and edit task form owns a reliable scroll area');
 assert.match(source,/function addTaskCategoryFromCapture\(\)/,'New task categories are persisted from capture');
 assert.match(source,/function addTaskSubcategoryFromCapture\(\)/,'New task subcategories are persisted from capture');
 assert.match(source,/data-edit-task="\$\{item\.id\}"/,'Assigned planner blocks expose task editing');
