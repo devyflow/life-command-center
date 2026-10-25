@@ -452,7 +452,7 @@ function attentionRail() {
 function compactTask(task, mode = 'normal') {
   const meta = task.start ? `${clock(mins(task.start))} · ${duration(task.duration)}` : `${duration(task.duration)} · no time chosen`;
   const action = mode === 'risk' ? `<button data-rescue-open="${task.id}">Resolve</button>` : mode === 'flex' ? `<button data-place-task="${task.id}">Place it</button>` : `<button data-start-now="${task.id}">Start</button>`;
-  return `<div class="compact-task"><i class="state-edge ${mode}"></i><div><b>${esc(task.title)}</b><small>${meta} · ${esc(task.area)} / ${esc(task.category)}</small></div>${action}</div>`;
+  return `<div class="compact-task"><i class="state-edge ${mode}"></i><div><b>${esc(task.title)}</b><small>${meta} · ${esc(task.area)} / ${esc(task.category)}</small></div><div class="compact-task-actions"><button class="compact-edit" data-edit-task="${task.id}" aria-label="Edit ${esc(task.title)}">Edit</button>${action}</div></div>`;
 }
 function todayView() {
   const tasks = state.tasks.filter(t => t.date === iso() && t.plan !== 'inbox' && t.progress < 100);
@@ -467,7 +467,7 @@ function todayView() {
   return `${pageHead(new Date().toLocaleDateString('en-US',{weekday:'long',day:'numeric',month:'long'}).toUpperCase(), `Today, clearly.<br><em>Nothing out of sight.</em>`, `<button class="secondary" data-view="all">All open tasks</button><button class="primary" data-open="taskModal">+ Capture</button>`)}
     <section class="metric-row"><article class="metric"><small>OPEN TODAY</small><strong>${tasks.length}</strong><span>${unscheduled.length} still need a time</span></article><article class="metric"><small>REMAINING LOAD</small><strong>${duration(remaining)}</strong><span>${remaining>300?'Protect your focus blocks':'Achievable with breathing room'}</span></article><article class="metric"><small>PRODUCTIVE RHYTHM</small><strong>${state.profile.streak} days</strong><span>Rest never resets this</span></article><article class="metric accent"><small>MOMENTUM</small><strong>${state.profile.xp} XP</strong><span>${momentum.current.symbol} ${momentum.current.name}</span></article></section>
     <div class="today-flow">
-      ${nowTask ? `<article class="now-card"><div><p class="eyebrow">NOW · RECOMMENDED NEXT ACTION</p><h2>${esc(nowTask.title)}</h2><p>${duration(Math.round(nowTask.duration*(1-nowTask.progress/100)))} remaining · ${nowTask.energy} energy · ${nowTask.progress}% complete</p><p class="next-action">Next: ${esc(nowTask.next||'Define the first physical action')}</p></div><div class="now-actions"><button class="defer" data-rescue-open="${nowTask.id}">Not now</button><button class="start-now" data-start-now="${nowTask.id}">▶ Start focus</button></div></article>` : `<div class="empty"><b>Nothing is demanding your attention.</b>Enjoy the open space or capture what matters.</div>`}
+      ${nowTask ? `<article class="now-card"><div><p class="eyebrow">NOW · RECOMMENDED NEXT ACTION</p><h2>${esc(nowTask.title)}</h2><p>${duration(Math.round(nowTask.duration*(1-nowTask.progress/100)))} remaining · ${nowTask.energy} energy · ${nowTask.progress}% complete</p><p class="next-action">Next: ${esc(nowTask.next||'Define the first physical action')}</p></div><div class="now-actions"><button class="defer" data-edit-task="${nowTask.id}">Edit task</button><button class="defer" data-rescue-open="${nowTask.id}">Not now</button><button class="start-now" data-start-now="${nowTask.id}">▶ Start focus</button></div></article>` : `<div class="empty"><b>Nothing is demanding your attention.</b>Enjoy the open space or capture what matters.</div>`}
       <div class="today-columns"><section class="attention-section"><div class="section-title"><div><h2>Next</h2><p>The next visible commitments, in order.</p></div><button class="ghost-btn" data-view="planner">Timeline →</button></div>${next.length?next.map(t=>compactTask(t)).join(''):'<div class="empty"><b>No next commitment.</b>Your schedule has room.</div>'}<div class="mini-timeline">${[8,11,14,17,20,22].map(h=>`<div class="mini-hour"><span>${h>12?h-12:h}${h>=12?'p':'a'}</span><i class="${scheduled.some(t=>mins(t.start)>=h*60&&mins(t.start)<(h+3)*60)?'busy':'open'}"></i></div>`).join('')}</div></section>
       <section class="attention-section danger"><div class="section-title"><div><h2>At risk</h2><p>These can be missed unless you decide.</p></div></div>${risk.length?risk.map(t=>compactTask(t,'risk')).join(''):'<div class="empty"><b>Nothing at risk.</b>Your commitments are covered.</div>'}</section></div>
       <section class="attention-section flexible"><div class="section-title"><div><h2>Unscheduled today</h2><p>Belongs today, but has no hour. These never disappear into a list.</p></div><button class="ghost-btn" data-view="planner">Place on timeline →</button></div>${unscheduled.length?unscheduled.map(t=>compactTask(t,'flex')).join(''):'<div class="empty"><b>Every task has a home.</b>No floating commitments today.</div>'}</section>
@@ -480,7 +480,7 @@ function positionedBlock(item, type = 'task') {
   const klass = type === 'free' ? 'free' : type === 'pending' ? 'pending' : (item.area || 'Career').toLowerCase();
   const title = type === 'free' ? item.label : type === 'pending' ? `Pending · ${item.purpose}` : item.title;
   const drag=type==='task'?`draggable="true" data-planner-task="${item.id}"`:'';
-  return `<div class="time-block ${klass} ${ui.plannerSelected===item.id?'planner-selected':''}" ${drag} style="top:${top}px;height:${height}px;${type==='task'?`border-color:${color(item.area)}`:''}" title="${type==='task'?'Select, then choose another hour':''}"><b>${esc(title)}</b><small>${clock(start)} · ${duration(item.duration || mins(item.end) - start)}</small></div>`;
+  return `<div class="time-block ${klass} ${ui.plannerSelected===item.id?'planner-selected':''}" ${drag} style="top:${top}px;height:${height}px;${type==='task'?`border-color:${color(item.area)}`:''}" title="${type==='task'?'Select, move or edit this task':''}"><b>${esc(title)}</b><small>${clock(start)} · ${duration(item.duration || mins(item.end) - start)}</small>${type==='task'?`<button class="time-block-edit" type="button" draggable="false" data-edit-task="${item.id}" aria-label="Edit ${esc(item.title)}">Edit</button>`:''}</div>`;
 }
 function fitSlots(task) {
   const start = mins(task.windowStart || '09:00'), end = mins(task.windowEnd || '18:00'), d = task.duration;
@@ -498,8 +498,8 @@ function plannerView() {
     <div class="planner-layout">
       <section class="calendar-board"><div class="calendar-head"><span>${date === iso() ? 'TODAY' : 'DAY'}</span><div><strong>${dayLong(date)}</strong><span>${scheduled.length} commitments · ${duration(scheduled.reduce((n,t)=>n+t.duration,0))}</span><small class="planner-drag-hint">Drag any task block to a new hour</small></div></div><div class="timeline">${hourRows()}${blocks}</div></section>
       <aside class="planner-side">
-        ${decisions.map(t => `<article class="decision-card"><p class="eyebrow">DECIDE BY ${dateLabel(t.decideBy || iso()).toUpperCase()}</p><h3>${esc(t.title)}</h3><p>${duration(t.duration)} needed between ${clock(mins(t.windowStart))} and ${clock(mins(t.windowEnd))}. Choose when your energy fits.</p><div class="slot-picks">${fitSlots(t).map((s,i)=>`<button data-schedule="${t.id}" data-time="${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}"><b>${clock(s)}–${clock(s+t.duration)}</b>${i===1?'Best balance with your current plan':i===0?'Finish it early':'Keep the daytime flexible'}</button>`).join('')}</div></article>`).join('')}
-        <article class="unscheduled-card"><p class="eyebrow">STILL FLEXIBLE</p><h3>Tasks waiting for a home</h3><p>Drag one onto an hour, or select it and tap an hour.</p>${flexible.filter(t=>t.plan!=='window').map(t=>`<div class="unscheduled-item ${ui.plannerSelected===t.id?'planner-selected':''}" draggable="true" data-planner-task="${t.id}"><b>${esc(t.title)}</b><span>${duration(t.duration)} · ${t.energy} energy</span><div class="slot-picks"><button data-schedule="${t.id}" data-time="15:00">Place at 3:00 PM</button></div></div>`).join('') || '<div class="empty"><b>Everything has a place.</b>No loose work on this day.</div>'}</article>
+        ${decisions.map(t => `<article class="decision-card"><div class="planner-card-head"><div><p class="eyebrow">DECIDE BY ${dateLabel(t.decideBy || iso()).toUpperCase()}</p><h3>${esc(t.title)}</h3></div><button class="compact-edit" data-edit-task="${t.id}">Edit</button></div><p>${duration(t.duration)} needed between ${clock(mins(t.windowStart))} and ${clock(mins(t.windowEnd))}. Choose when your energy fits.</p><div class="slot-picks">${fitSlots(t).map((s,i)=>`<button data-schedule="${t.id}" data-time="${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}"><b>${clock(s)}–${clock(s+t.duration)}</b>${i===1?'Best balance with your current plan':i===0?'Finish it early':'Keep the daytime flexible'}</button>`).join('')}</div></article>`).join('')}
+        <article class="unscheduled-card"><p class="eyebrow">STILL FLEXIBLE</p><h3>Tasks waiting for a home</h3><p>Drag one onto an hour, or select it and tap an hour.</p>${flexible.filter(t=>t.plan!=='window').map(t=>`<div class="unscheduled-item ${ui.plannerSelected===t.id?'planner-selected':''}" draggable="true" data-planner-task="${t.id}"><div class="planner-card-head"><div><b>${esc(t.title)}</b><span>${duration(t.duration)} · ${t.energy} energy</span></div><button class="compact-edit" type="button" draggable="false" data-edit-task="${t.id}">Edit</button></div><div class="slot-picks"><button data-schedule="${t.id}" data-time="15:00">Place at 3:00 PM</button></div></div>`).join('') || '<div class="empty"><b>Everything has a place.</b>No loose work on this day.</div>'}</article>
       </aside>
     </div>`;
 }
@@ -784,12 +784,16 @@ function updateTaskPlanFields() {
   $('#taskStartLabel').textContent=plan==='window'?'Earliest time':'Start time';
   const hints={inbox:'Keep it safely in your Inbox until you decide.',today:'Choose the day now and place an hour later.',fixed:'Reserve an exact start time on the hourly planner.',window:'Set a range now; the app will keep the final time decision visible.'};
   $('#taskPlanHint').textContent=hints[plan]||hints.inbox;
+  $$('[data-task-plan-choice]').forEach(button=>{const active=button.dataset.taskPlanChoice===plan;button.classList.toggle('active',active);button.setAttribute('aria-pressed',String(active));});
 }
 function openTaskEditor(task = null) {
   ui.editTaskId = task?.id || null;
   const form = $('#taskForm'); form.reset();resetCaptureSource();
-  $('#taskModalTitle').textContent = task ? 'Edit the commitment.' : 'Give it a place.';
-  $('#taskSubmit').textContent = task ? 'Save changes →' : 'Capture task →';
+  $('#taskModalEyebrow').textContent=task?'EDIT TASK':'NEW TASK';
+  $('#taskModalTitle').textContent = task ? 'Update the plan.' : 'Capture what matters.';
+  $('#taskModalSubtitle').textContent=task?'Change any detail. Every view will update together.':'Start with the task. Add structure only where it helps.';
+  $('#taskSubmit').textContent = task ? 'Save changes →' : 'Add task →';
+  $('#taskMoreOptions').open=Boolean(task);
   $('#taskDelete').hidden = !task;
   $('#taskTitle').value = task?.title || '';
   const area=task?.area||state.taxonomy[0]?.name||'Unsorted';populateAreaSelect($('#taskArea'),area);setTaskCategories(area,task?.category||state.taxonomy.find(item=>item.name===area)?.categories[0]||'General');
@@ -1087,6 +1091,8 @@ document.addEventListener('click', event => {
   if(event.target.closest('[data-scan-add-line]')){addManualScanLine();return;}
   const opener = event.target.closest('[data-open]'); if (opener) { opener.dataset.open==='taskModal'?openTaskEditor():openModal(opener.dataset.open); return; }
   const closer = event.target.closest('[data-close]'); if (closer) { closeModal(closer.dataset.close); return; }
+  const planChoice=event.target.closest('[data-task-plan-choice]');if(planChoice){$('#taskPlan').value=planChoice.dataset.taskPlanChoice;updateTaskPlanFields();return;}
+  const editTask=event.target.closest('[data-edit-task]');if(editTask){const task=state.tasks.find(item=>String(item.id)===String(editTask.dataset.editTask));if(task)openTaskEditor(task);return;}
   const plannerTask=event.target.closest('[data-planner-task]');if(plannerTask&&!event.target.closest('[data-schedule]')){ui.plannerSelected=Number(plannerTask.dataset.plannerTask);render();toast('Task selected','Choose an hour on the timeline, or drag it there.');return;}
   const plannerHour=event.target.closest('[data-planner-time]');if(plannerHour&&ui.plannerSelected){const task=state.tasks.find(item=>item.id===ui.plannerSelected);if(task){task.date=ui.planningDate;task.start=plannerHour.dataset.plannerTime;task.plan='fixed';save();ui.plannerSelected=null;render();toast('Task placed on the day',`${task.title} is now at ${clock(mins(task.start))}.`);}return;}
   if (event.target.closest('[data-attention-open]')) { setView('all'); return; }

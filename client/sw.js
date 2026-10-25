@@ -1,4 +1,4 @@
-const CACHE = "life-command-static-v14";
+const CACHE = "life-command-static-v15";
 const REMINDER_CACHE = "life-command-reminders-v1";
 const STATIC = ["/styles.css", "/app.js", "/scene.js", "/manifest.webmanifest", "/icon-192.png", "/icon-512.png"];
 

@@ -14,7 +14,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&family=Newsreader:ital,opsz,wght@1,6..72,500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=workspace-v8">
+  <link rel="stylesheet" href="styles.css?v=workspace-v9">
 </head>
 <body>
   <div class="grain" aria-hidden="true"></div>
@@ -77,10 +77,13 @@
   </div>
 
   <div class="modal-layer" id="taskModal" aria-hidden="true">
-    <div class="modal task-modal" role="dialog" aria-modal="true" aria-labelledby="taskModalTitle">
-      <header class="modal-head"><div><p class="eyebrow">QUICK CAPTURE</p><h2 id="taskModalTitle">Give it a place.</h2></div><button data-close="taskModal">×</button></header>
-      <form id="taskForm">
-        <label class="title-field"><span>What needs your attention?</span><textarea id="taskTitle" rows="2" required placeholder="Prepare DSA practice set"></textarea></label>
+    <div class="modal task-modal task-capture-modal" role="dialog" aria-modal="true" aria-labelledby="taskModalTitle">
+      <header class="modal-head task-modal-head"><div class="task-modal-heading"><span class="capture-orb" aria-hidden="true">+</span><div><p class="eyebrow" id="taskModalEyebrow">NEW TASK</p><h2 id="taskModalTitle">Capture what matters.</h2><p id="taskModalSubtitle">Start with the task. Add structure only where it helps.</p></div></div><button data-close="taskModal" aria-label="Close task menu">×</button></header>
+      <form id="taskForm" class="task-capture-form">
+        <section class="capture-title-card">
+          <label class="title-field"><span>What do you want to move forward?</span><textarea id="taskTitle" rows="2" required placeholder="Prepare DSA practice set"></textarea></label>
+          <small>Use a clear action, such as “Draft the introduction” or “Book the appointment”.</small>
+        </section>
         <details class="capture-source" id="taskSourcePanel">
           <summary><span>✦ Suggest tasks from a photo or link</span><small>Review suggestions before anything is added</small></summary>
           <div class="capture-source-body">
@@ -90,23 +93,42 @@
             <button class="bare-link capture-knowledge-save" id="taskSourceSaveKnowledge" type="button" hidden>+ Keep this source in Useful Library</button>
           </div>
         </details>
-        <div class="form-grid">
-          <label>Life area<select id="taskArea"><option>Career</option><option>Personal</option><option>Growth</option></select></label>
-          <label>Category<select id="taskCategory"><option>College</option><option>DSA</option><option>Meetings</option><option>Projects</option></select></label>
-          <label>Duration<select id="taskDuration"><option value="15">15 minutes</option><option value="30">30 minutes</option><option value="45">45 minutes</option><option value="60" selected>1 hour</option><option value="90">1.5 hours</option><option value="120">2 hours</option></select></label>
-          <label>Energy<select id="taskEnergy"><option value="low">Low</option><option value="medium" selected>Medium</option><option value="high">High</option></select></label>
-          <label>Plan type<select id="taskPlan"><option value="inbox">Decide later</option><option value="today">Flexible day</option><option value="fixed">Fixed time</option><option value="window">Flexible time window</option></select><small class="field-help" id="taskPlanHint">Keep it safely in your Inbox until you decide.</small></label>
-          <label data-task-plan-show="scheduled">Date<input id="taskDate" type="date"></label>
-          <label>Repeat<select id="taskRepeat"><option value="none">Does not repeat</option><option value="daily">Every day</option><option value="weekly">Every week</option><option value="monthly">Every month</option></select></label>
-          <label data-task-plan-show="timed"><span id="taskStartLabel">Start time</span><input id="taskStart" type="time" value="10:00"></label>
-          <label data-task-plan-show="window">Latest time<input id="taskEnd" type="time" value="18:00"></label>
-          <label data-task-plan-show="window">Decide exact time by<input id="decideBy" type="date"></label>
-          <label>First tiny step<input id="taskNext" type="text" placeholder="Open notes and outline"></label>
-        </div>
-        <div class="capture-marks"><span>Paper meaning</span><label><input id="taskCircle" type="checkbox"> ◯ Important</label><label><input id="taskReady" type="checkbox"> ✓ Ready to act</label><label><input id="taskBox" type="checkbox"> □ Protect this time</label><label><input id="taskStar" type="checkbox"> ★ Today focus</label></div>
+        <section class="capture-section capture-plan-section">
+          <div class="capture-section-head"><div><span>1</span><b>Where should it go?</b></div><small id="taskPlanHint">Keep it safely in your Inbox until you decide.</small></div>
+          <label class="capture-native-plan">Plan type<select id="taskPlan"><option value="inbox">Decide later</option><option value="today">Flexible day</option><option value="fixed">Fixed time</option><option value="window">Flexible time window</option></select></label>
+          <div class="capture-plan-grid" role="group" aria-label="Choose how to plan this task">
+            <button type="button" data-task-plan-choice="inbox"><i>↓</i><b>Inbox</b><small>Decide later</small></button>
+            <button type="button" data-task-plan-choice="today"><i>○</i><b>Choose a day</b><small>Time can wait</small></button>
+            <button type="button" data-task-plan-choice="fixed"><i>◷</i><b>Exact time</b><small>Reserve an hour</small></button>
+            <button type="button" data-task-plan-choice="window"><i>↔</i><b>Time window</b><small>Decide when ready</small></button>
+          </div>
+          <div class="schedule-fields form-grid">
+            <label data-task-plan-show="scheduled">Date<input id="taskDate" type="date"></label>
+            <label data-task-plan-show="timed"><span id="taskStartLabel">Start time</span><input id="taskStart" type="time" value="10:00"></label>
+            <label data-task-plan-show="window">Latest time<input id="taskEnd" type="time" value="18:00"></label>
+            <label data-task-plan-show="window">Decide exact time by<input id="decideBy" type="date"></label>
+          </div>
+        </section>
+        <section class="capture-section">
+          <div class="capture-section-head"><div><span>2</span><b>Give it useful context</b></div><small>These choices keep lists focused.</small></div>
+          <div class="form-grid capture-context-grid">
+            <label>Life area<select id="taskArea"><option>Career</option><option>Personal</option><option>Growth</option></select></label>
+            <label>Category<select id="taskCategory"><option>College</option><option>DSA</option><option>Meetings</option><option>Projects</option></select></label>
+            <label>Duration<select id="taskDuration"><option value="15">15 minutes</option><option value="30">30 minutes</option><option value="45">45 minutes</option><option value="60" selected>1 hour</option><option value="90">1.5 hours</option><option value="120">2 hours</option></select></label>
+            <label>Energy<select id="taskEnergy"><option value="low">Low</option><option value="medium" selected>Medium</option><option value="high">High</option></select></label>
+          </div>
+          <label class="capture-next-step">First tiny step<input id="taskNext" type="text" placeholder="Open notes and outline"></label>
+        </section>
+        <details class="capture-more-options" id="taskMoreOptions">
+          <summary><div><span>•••</span><b>Focus, repetition and Paper marks</b></div><small>Optional settings</small></summary>
+          <div class="capture-more-body">
+            <div class="form-grid capture-repeat-grid"><label>Repeat<select id="taskRepeat"><option value="none">Does not repeat</option><option value="daily">Every day</option><option value="weekly">Every week</option><option value="monthly">Every month</option></select></label></div>
+            <div class="capture-marks"><span>Paper meaning</span><label><input id="taskCircle" type="checkbox"> ◯ Important</label><label><input id="taskReady" type="checkbox"> ✓ Ready to act</label><label><input id="taskBox" type="checkbox"> □ Protect this time</label><label><input id="taskStar" type="checkbox"> ★ Today focus</label></div>
+            <div class="choice-row"><label><input id="taskTimer" type="checkbox" checked> Add focus timer</label><label><input id="taskPublish" type="checkbox"> Show on shared calendar</label><label><input id="taskCalendar" type="checkbox"> Add to calendar when scheduled</label></div>
+          </div>
+        </details>
         <section class="task-knowledge" id="taskKnowledge" hidden><div><span class="eyebrow">FROM YOUR USEFUL LIBRARY</span><b>Relevant material for this task</b></div><div id="taskKnowledgeItems"></div></section>
-        <div class="choice-row"><label><input id="taskTimer" type="checkbox" checked> Add focus timer</label><label><input id="taskPublish" type="checkbox"> Show on shared calendar</label><label><input id="taskCalendar" type="checkbox"> Add to calendar when scheduled</label></div>
-        <footer class="modal-actions"><span>Nothing has to be perfect yet.</span><div><button class="danger-button" type="button" id="taskDelete" hidden>Delete task</button><button class="primary" type="submit" id="taskSubmit">Capture task →</button></div></footer>
+        <footer class="modal-actions task-capture-actions"><span>Your task stays editable everywhere it appears.</span><div><button class="danger-button" type="button" id="taskDelete" hidden>Delete task</button><button class="secondary" type="button" data-close="taskModal">Cancel</button><button class="primary" type="submit" id="taskSubmit">Add task →</button></div></footer>
       </form>
     </div>
   </div>
@@ -263,7 +285,7 @@
   <aside class="update-nudge" id="updateNudge" aria-live="polite" hidden><span>↻</span><div><b>A fresher version is ready</b><small>Restart to load interface improvements. Your saved work is safe.</small></div><button id="applyUpdate" type="button">Restart</button><button id="dismissUpdate" class="bare" type="button" aria-label="Dismiss update">×</button></aside>
   <div class="toast" id="toast" role="status" aria-live="polite"><span>✓</span><div><b id="toastTitle">Saved</b><small id="toastText">Your change is ready.</small></div><button id="toastAction" type="button" hidden>Undo</button></div>
   <div class="xp-burst" id="xpBurst"><span>✦</span><b id="xpBurstValue">+10 XP</b><small id="xpBurstText">Momentum earned</small></div>
-  <script src="app.js?v=workspace-v8"></script>
+  <script src="app.js?v=workspace-v9"></script>
   <script type="module" src="scene.js?v=workspace-v7"></script>
 </body>
 </html>

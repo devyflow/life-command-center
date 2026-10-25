@@ -133,12 +133,16 @@ const manifest=JSON.parse(await readFile(new URL('../client/manifest.webmanifest
 assert.equal(manifest.share_target.action,'/?share-target=1','Installed app can receive shared links');
 const serviceWorker=await readFile(new URL('../client/sw.js',import.meta.url),'utf8');
 assert.match(serviceWorker,/periodicsync/,'Supporting installed browsers can check reminders in the background');
-assert.match(serviceWorker,/life-command-static-v14/,'A new cache generation ships account-safe app assets');
+assert.match(serviceWorker,/life-command-static-v15/,'A new cache generation ships account-safe app assets');
 assert.match(serviceWorker,/freshAsset/,'JavaScript and CSS check the network before using stale cache');
 const page=await readFile(new URL('../client/index.html',import.meta.url),'utf8');
 const stylesheet=await readFile(new URL('../client/styles.css',import.meta.url),'utf8');
 assert.match(page,/id="mobileMore"/,'Mobile navigation keeps every section reachable through More');
 assert.match(page,/data-task-plan-show="window"/,'Task capture progressively reveals flexible-window fields');
+assert.match(page,/data-task-plan-choice="fixed"/,'Task capture provides a direct modern planning choice');
+assert.match(page,/class="capture-more-options"/,'Optional capture settings stay available without crowding the main flow');
+assert.match(source,/data-edit-task="\$\{item\.id\}"/,'Assigned planner blocks expose task editing');
+assert.match(source,/const editTask=event\.target\.closest\('\[data-edit-task\]'/,'Task editing is handled consistently across views');
 assert.match(page,/id="toastAction"/,'Destructive actions can offer an inline recovery action');
 assert.match(page,/id="focusExit"/,'Focus mode always has a visible exit control');
 assert.match(page,/id="focusSidebar"/,'Installed mobile users can enter focus mode from More');
