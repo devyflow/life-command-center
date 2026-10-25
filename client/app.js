@@ -206,7 +206,7 @@ function populateAreaSelect(select, selected='') {
 function taxonomyDraftFromState(){return state.taxonomy.map(area=>({name:area.name,color:area.color,originalName:area.name,categories:area.categories.map(name=>({name,originalName:name}))}));}
 function renderTaxonomyEditor(){
   const root=$('#taxonomyEditor');if(!root||!taxonomyDraft)return;
-  root.innerHTML=taxonomyDraft.map((area,areaIndex)=>`<article class="taxonomy-area"><div class="taxonomy-area-head"><input type="color" value="${area.color}" data-tax-area-color="${areaIndex}" aria-label="${esc(area.name)} color"><input type="text" value="${esc(area.name)}" data-tax-area-name="${areaIndex}" maxlength="32" aria-label="Area name"><button class="taxonomy-remove" type="button" data-tax-remove-area="${areaIndex}" title="Remove area">×</button></div><div class="taxonomy-categories">${area.categories.map((category,categoryIndex)=>`<label class="taxonomy-category"><input type="text" value="${esc(category.name)}" data-tax-category-name="${areaIndex}:${categoryIndex}" maxlength="40" aria-label="Category name"><button class="taxonomy-remove" type="button" data-tax-remove-category="${areaIndex}:${categoryIndex}" title="Remove category">×</button></label>`).join('')}</div><button class="taxonomy-add" type="button" data-tax-add-category="${areaIndex}">+ Add category</button></article>`).join('');
+  root.innerHTML=taxonomyDraft.map((area,areaIndex)=>`<article class="taxonomy-area"><div class="taxonomy-area-head"><input type="color" value="${area.color}" data-tax-area-color="${areaIndex}" aria-label="${esc(area.name)} color"><input type="text" value="${esc(area.name)}" data-tax-area-name="${areaIndex}" maxlength="32" aria-label="Category name"><button class="taxonomy-remove" type="button" data-tax-remove-area="${areaIndex}" title="Remove category">×</button></div><div class="taxonomy-categories">${area.categories.map((category,categoryIndex)=>`<label class="taxonomy-category"><input type="text" value="${esc(category.name)}" data-tax-category-name="${areaIndex}:${categoryIndex}" maxlength="40" aria-label="Subcategory name"><button class="taxonomy-remove" type="button" data-tax-remove-category="${areaIndex}:${categoryIndex}" title="Remove subcategory">×</button></label>`).join('')}</div><button class="taxonomy-add" type="button" data-tax-add-category="${areaIndex}">+ Add subcategory</button></article>`).join('');
 }
 function openSettings(){
   taxonomyDraft=taxonomyDraftFromState();renderTaxonomyEditor();
@@ -245,8 +245,8 @@ async function switchWorkspace(workspaceId){try{await accountRequest('switch_wor
 async function returnOwnerWorkspace(){try{await accountRequest('return_owner');location.replace('/');}catch(error){toast('Could not return',error.message);}}
 function saveTaxonomy(){
   const clean=taxonomyDraft.map(area=>({name:area.name.trim(),color:area.color,categories:area.categories.map(c=>c.name.trim()).filter(Boolean)}));
-  if(clean.some(area=>!area.name||!area.categories.length)){toast('Each area needs a name and category','Add at least one category before saving.');return;}
-  if(new Set(clean.map(area=>area.name.toLowerCase())).size!==clean.length){toast('Area names must be unique');return;}
+  if(clean.some(area=>!area.name||!area.categories.length)){toast('Each category needs a name and subcategory','Add at least one subcategory before saving.');return;}
+  if(new Set(clean.map(area=>area.name.toLowerCase())).size!==clean.length){toast('Category names must be unique');return;}
   for(const area of taxonomyDraft){
     if(!area.originalName)continue;
     state.tasks.filter(task=>task.area===area.originalName).forEach(task=>{
@@ -776,6 +776,22 @@ function setTaskCategories(area, selected = '') {
   const options=[...(state.taxonomy.find(item=>item.name===area)?.categories||[])];if(selected&&!options.includes(selected))options.unshift(selected);
   $('#taskCategory').innerHTML = options.map(x=>`<option ${x===selected?'selected':''}>${esc(x)}</option>`).join('');
 }
+function closeTaskTaxonomyCreators(){
+  $('#taskCategoryCreator').hidden=true;$('#taskSubcategoryCreator').hidden=true;$('#newTaskCategoryName').value='';$('#newTaskSubcategoryName').value='';
+}
+function addTaskCategoryFromCapture(){
+  const input=$('#newTaskCategoryName'),name=input.value.trim();if(name.length<2){toast('Name the category','Use at least two characters.');input.focus();return;}
+  const existing=state.taxonomy.find(item=>item.name.toLowerCase()===name.toLowerCase());
+  if(existing){populateAreaSelect($('#taskArea'),existing.name);setTaskCategories(existing.name,existing.categories[0]||'General');toast('Category already exists',`${existing.name} is selected.`);closeTaskTaxonomyCreators();return;}
+  const palette=['#ff7962','#75a6ff','#9cbe52','#9a7bc1','#f2b84b'],category={name,color:palette[state.taxonomy.length%palette.length],categories:['General']};state.taxonomy.push(category);populateAreaSelect($('#taskArea'),name);setTaskCategories(name,'General');save();render();closeTaskTaxonomyCreators();toast('Category added',`${name} is ready. Add a more specific subcategory whenever you need one.`);
+}
+function addTaskSubcategoryFromCapture(){
+  const input=$('#newTaskSubcategoryName'),name=input.value.trim(),area=state.taxonomy.find(item=>item.name===$('#taskArea').value);if(!area)return;
+  if(name.length<2){toast('Name the subcategory','Use at least two characters.');input.focus();return;}
+  const existing=area.categories.find(item=>item.toLowerCase()===name.toLowerCase());
+  if(existing){setTaskCategories(area.name,existing);toast('Subcategory already exists',`${existing} is selected.`);closeTaskTaxonomyCreators();return;}
+  area.categories.push(name);setTaskCategories(area.name,name);save();render();closeTaskTaxonomyCreators();toast('Subcategory added',`${name} was added under ${area.name}.`);
+}
 function updateTaskPlanFields() {
   const plan=$('#taskPlan').value;
   $$('[data-task-plan-show="scheduled"]').forEach(el=>el.hidden=plan==='inbox');
@@ -788,7 +804,7 @@ function updateTaskPlanFields() {
 }
 function openTaskEditor(task = null) {
   ui.editTaskId = task?.id || null;
-  const form = $('#taskForm'); form.reset();resetCaptureSource();
+  const form = $('#taskForm'); form.reset();resetCaptureSource();closeTaskTaxonomyCreators();
   $('#taskModalEyebrow').textContent=task?'EDIT TASK':'NEW TASK';
   $('#taskModalTitle').textContent = task ? 'Update the plan.' : 'Capture what matters.';
   $('#taskModalSubtitle').textContent=task?'Change any detail. Every view will update together.':'Start with the task. Add structure only where it helps.';
@@ -1229,15 +1245,22 @@ $('#installApp').addEventListener('click',installWebsite);
 $('#installNudgeAction').addEventListener('click',installWebsite);
 $('#installNudgeDismiss').addEventListener('click',()=>hideInstallNudge(true));
 $('#reminderLead').addEventListener('change',event=>{state.preferences.reminderLead=Number(event.target.value);save();toast('Reminder timing saved',`Alerts will appear ${event.target.value} minutes before scheduled work.`);});
-$('#addArea').addEventListener('click',()=>{const palette=['#ff7962','#75a6ff','#9cbe52','#9a7bc1','#f2b84b'];taxonomyDraft.push({name:`Area ${taxonomyDraft.length+1}`,color:palette[taxonomyDraft.length%palette.length],originalName:null,categories:[{name:'General',originalName:null}]});renderTaxonomyEditor();});
+$('#addArea').addEventListener('click',()=>{const palette=['#ff7962','#75a6ff','#9cbe52','#9a7bc1','#f2b84b'];taxonomyDraft.push({name:`Category ${taxonomyDraft.length+1}`,color:palette[taxonomyDraft.length%palette.length],originalName:null,categories:[{name:'General',originalName:null}]});renderTaxonomyEditor();});
 $('#saveTaxonomy').addEventListener('click',saveTaxonomy);
 $('#taxonomyEditor').addEventListener('input',event=>{if(event.target.matches('[data-tax-area-name]'))taxonomyDraft[Number(event.target.dataset.taxAreaName)].name=event.target.value;if(event.target.matches('[data-tax-area-color]'))taxonomyDraft[Number(event.target.dataset.taxAreaColor)].color=event.target.value;if(event.target.matches('[data-tax-category-name]')){const [areaIndex,categoryIndex]=event.target.dataset.taxCategoryName.split(':').map(Number);taxonomyDraft[areaIndex].categories[categoryIndex].name=event.target.value;}});
 $('#taxonomyEditor').addEventListener('click',event=>{
-  const add=event.target.closest('[data-tax-add-category]');if(add){taxonomyDraft[Number(add.dataset.taxAddCategory)].categories.push({name:'New category',originalName:null});renderTaxonomyEditor();return;}
-  const removeCategory=event.target.closest('[data-tax-remove-category]');if(removeCategory){const [areaIndex,categoryIndex]=removeCategory.dataset.taxRemoveCategory.split(':').map(Number),area=taxonomyDraft[areaIndex],category=area.categories[categoryIndex];if(category.originalName&&state.tasks.some(task=>task.area===area.originalName&&task.category===category.originalName)){toast('Category is still in use','Move its tasks before removing it.');return;}if(area.categories.length===1){toast('Keep at least one category in each area');return;}area.categories.splice(categoryIndex,1);renderTaxonomyEditor();return;}
-  const removeArea=event.target.closest('[data-tax-remove-area]');if(removeArea){const areaIndex=Number(removeArea.dataset.taxRemoveArea),area=taxonomyDraft[areaIndex];if(area.originalName&&state.tasks.some(task=>task.area===area.originalName)){toast('Area is still in use','Move its tasks before removing it.');return;}if(taxonomyDraft.length===1){toast('Keep at least one life area');return;}taxonomyDraft.splice(areaIndex,1);renderTaxonomyEditor();}
+  const add=event.target.closest('[data-tax-add-category]');if(add){taxonomyDraft[Number(add.dataset.taxAddCategory)].categories.push({name:'New subcategory',originalName:null});renderTaxonomyEditor();return;}
+  const removeCategory=event.target.closest('[data-tax-remove-category]');if(removeCategory){const [areaIndex,categoryIndex]=removeCategory.dataset.taxRemoveCategory.split(':').map(Number),area=taxonomyDraft[areaIndex],category=area.categories[categoryIndex];if(category.originalName&&state.tasks.some(task=>task.area===area.originalName&&task.category===category.originalName)){toast('Subcategory is still in use','Move its tasks before removing it.');return;}if(area.categories.length===1){toast('Keep at least one subcategory in each category');return;}area.categories.splice(categoryIndex,1);renderTaxonomyEditor();return;}
+  const removeArea=event.target.closest('[data-tax-remove-area]');if(removeArea){const areaIndex=Number(removeArea.dataset.taxRemoveArea),area=taxonomyDraft[areaIndex];if(area.originalName&&state.tasks.some(task=>task.area===area.originalName)){toast('Category is still in use','Move its tasks before removing it.');return;}if(taxonomyDraft.length===1){toast('Keep at least one category');return;}taxonomyDraft.splice(areaIndex,1);renderTaxonomyEditor();}
 });
-$('#taskArea').addEventListener('change',()=>setTaskCategories($('#taskArea').value));
+$('#taskArea').addEventListener('change',()=>{setTaskCategories($('#taskArea').value);$('#taskSubcategoryCreator').hidden=true;$('#newTaskSubcategoryName').value='';});
+$('#showTaskCategoryCreator').addEventListener('click',()=>{$('#taskCategoryCreator').hidden=false;$('#taskSubcategoryCreator').hidden=true;$('#newTaskCategoryName').focus();});
+$('#showTaskSubcategoryCreator').addEventListener('click',()=>{$('#taskSubcategoryCreator').hidden=false;$('#taskCategoryCreator').hidden=true;$('#newTaskSubcategoryName').focus();});
+$('#addTaskCategory').addEventListener('click',addTaskCategoryFromCapture);
+$('#addTaskSubcategory').addEventListener('click',addTaskSubcategoryFromCapture);
+$$('[data-cancel-taxonomy]').forEach(button=>button.addEventListener('click',closeTaskTaxonomyCreators));
+$('#newTaskCategoryName').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();addTaskCategoryFromCapture();}});
+$('#newTaskSubcategoryName').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();addTaskSubcategoryFromCapture();}});
 $('#taskPlan').addEventListener('change',updateTaskPlanFields);
 $('#boardForm').addEventListener('submit',event=>{event.preventDefault();const board={id:`board-${uid()}`,name:$('#boardName').value.trim(),theme:$('#boardTheme').value,createdAt:new Date().toISOString()};if(!board.name)return;state.boards.push(board);ui.boardId=board.id;save();closeModal('boardModal');render();toast('Board created','A new visual space is ready for your thoughts.');});
 $('#boardNoteForm').addEventListener('submit',event=>{event.preventDefault();const date=$('#boardNoteDate').value,time=$('#boardNoteTime').value||'09:00',values={type:$('#boardNoteType').value,text:$('#boardNoteText').value.trim(),color:$('#boardNoteColor').value,source:$('#boardNoteSource').value.trim(),showGlance:$('#boardNoteGlance').checked,popup:$('#boardNotePopup').checked,notifyAt:date?new Date(`${date}T${time}:00`).toISOString():null,updatedAt:new Date().toISOString()};if(!values.text)return;const existing=state.boardNotes.find(note=>note.id===ui.boardNoteId);if(existing)Object.assign(existing,values);else{const peers=state.boardNotes.filter(note=>note.boardId===activeBoard().id&&!note.archived),index=peers.length;state.boardNotes.push({id:uid(),boardId:activeBoard().id,x:45+(index%4)*275,y:70+Math.floor(index/4)*220,w:210,h:175,rotation:(index%3-1)*1.2,z:Math.max(1,...state.boardNotes.map(note=>Number(note.z)||0))+1,float:false,locked:false,archived:false,createdAt:new Date().toISOString(),...values});}save();ui.boardNoteId=null;closeModal('boardNoteModal');render();toast(existing?'Board note updated':'Pinned to your board',values.showGlance?'It can also appear in Glance around the app.':'It will stay on this board.');});

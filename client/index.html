@@ -14,7 +14,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&family=Newsreader:ital,opsz,wght@1,6..72,500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=workspace-v9">
+  <link rel="stylesheet" href="styles.css?v=workspace-v10">
 </head>
 <body>
   <div class="grain" aria-hidden="true"></div>
@@ -112,8 +112,8 @@
         <section class="capture-section">
           <div class="capture-section-head"><div><span>2</span><b>Give it useful context</b></div><small>These choices keep lists focused.</small></div>
           <div class="form-grid capture-context-grid">
-            <label>Life area<select id="taskArea"><option>Career</option><option>Personal</option><option>Growth</option></select></label>
-            <label>Category<select id="taskCategory"><option>College</option><option>DSA</option><option>Meetings</option><option>Projects</option></select></label>
+            <div class="capture-taxonomy-field"><label>Category<select id="taskArea"><option>Career</option><option>Personal</option><option>Growth</option></select></label><button type="button" class="capture-inline-add" id="showTaskCategoryCreator">+ New category</button><div class="capture-inline-creator" id="taskCategoryCreator" hidden><input id="newTaskCategoryName" type="text" maxlength="32" placeholder="e.g. Business"><button type="button" id="addTaskCategory">Add</button><button type="button" class="bare" data-cancel-taxonomy="category">Cancel</button></div></div>
+            <div class="capture-taxonomy-field"><label>Subcategory<select id="taskCategory"><option>College</option><option>DSA</option><option>Meetings</option><option>Projects</option></select></label><button type="button" class="capture-inline-add" id="showTaskSubcategoryCreator">+ New subcategory</button><div class="capture-inline-creator" id="taskSubcategoryCreator" hidden><input id="newTaskSubcategoryName" type="text" maxlength="40" placeholder="e.g. Placement prep"><button type="button" id="addTaskSubcategory">Add</button><button type="button" class="bare" data-cancel-taxonomy="subcategory">Cancel</button></div></div>
             <label>Duration<select id="taskDuration"><option value="15">15 minutes</option><option value="30">30 minutes</option><option value="45">45 minutes</option><option value="60" selected>1 hour</option><option value="90">1.5 hours</option><option value="120">2 hours</option></select></label>
             <label>Energy<select id="taskEnergy"><option value="low">Low</option><option value="medium" selected>Medium</option><option value="high">High</option></select></label>
           </div>
@@ -171,8 +171,8 @@
           <div class="history-clear-panel"><div><b>Completed task history</b><small id="completedHistoryCount">No completed tasks to clear.</small><p>Completed tasks stay visible until you clear them manually. Clearing removes them from Tasks, Search, Paper, Planner and cloud storage. Your XP and streak remain.</p></div><button class="danger-button" type="button" id="clearCompletedHistory">Clear history</button></div>
         </section>
         <section class="settings-panel taxonomy-panel">
-          <div class="settings-panel-head"><div><p class="eyebrow">MY LIFE</p><h3>Areas and categories</h3></div><button class="secondary" type="button" id="addArea">+ Area</button></div>
-          <p>Rename your structure here. Existing tasks follow their renamed area or category automatically.</p>
+          <div class="settings-panel-head"><div><p class="eyebrow">MY LIFE</p><h3>Categories and subcategories</h3></div><button class="secondary" type="button" id="addArea">+ Category</button></div>
+          <p>Rename your structure here. Existing tasks follow their renamed category or subcategory automatically.</p>
           <div id="taxonomyEditor" class="taxonomy-editor"></div>
           <button class="primary taxonomy-save" type="button" id="saveTaxonomy">Save organization →</button>
         </section>
@@ -224,8 +224,8 @@
         <section class="scan-review-panel">
           <div class="scan-review-head"><div><p class="eyebrow">DETECTED ITEMS</p><h3 id="scanReviewTitle">Your editable review will appear here.</h3></div><div><span id="scanConfidence"></span><button class="ghost-btn" type="button" data-scan-add-line>+ Add line</button></div></div>
           <div class="scan-destination">
-            <label>Life area<select id="scanArea"><option>Career</option><option>Personal</option><option>Growth</option></select></label>
-            <label>Category<input id="scanCategory" value="Scanned page" maxlength="40"></label>
+            <label>Category<select id="scanArea"><option>Career</option><option>Personal</option><option>Growth</option></select></label>
+            <label>Subcategory<input id="scanCategory" value="Scanned page" maxlength="40"></label>
           </div>
           <div class="scan-candidates" id="scanCandidates"><div class="scan-empty"><b>1</b><span>Choose a photo or screenshot.</span><b>2</b><span>Correct the detected lines.</span><b>3</b><span>Add them to your Paper page.</span></div></div>
         </section>
@@ -285,7 +285,7 @@
   <aside class="update-nudge" id="updateNudge" aria-live="polite" hidden><span>↻</span><div><b>A fresher version is ready</b><small>Restart to load interface improvements. Your saved work is safe.</small></div><button id="applyUpdate" type="button">Restart</button><button id="dismissUpdate" class="bare" type="button" aria-label="Dismiss update">×</button></aside>
   <div class="toast" id="toast" role="status" aria-live="polite"><span>✓</span><div><b id="toastTitle">Saved</b><small id="toastText">Your change is ready.</small></div><button id="toastAction" type="button" hidden>Undo</button></div>
   <div class="xp-burst" id="xpBurst"><span>✦</span><b id="xpBurstValue">+10 XP</b><small id="xpBurstText">Momentum earned</small></div>
-  <script src="app.js?v=workspace-v9"></script>
+  <script src="app.js?v=workspace-v10"></script>
   <script type="module" src="scene.js?v=workspace-v7"></script>
 </body>
 </html>

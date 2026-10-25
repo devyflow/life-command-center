@@ -62,6 +62,14 @@ run('state.profile={xp:0,streak:0,bestStreak:0,sessions:0,accuratePlans:0,bounda
 assert.equal(read('earnedBadges().filter(b=>b.earned).length'),0,'New users see no invented achievements');
 
 reset();
+run(`document.querySelector('#newTaskCategoryName').value='Business';addTaskCategoryFromCapture()`);
+assert.ok(read("state.taxonomy.some(item=>item.name==='Business')"),'Task capture can persist a new category');
+run(`document.querySelector('#taskArea').value='Business';document.querySelector('#newTaskSubcategoryName').value='Client work';addTaskSubcategoryFromCapture()`);
+assert.ok(read("state.taxonomy.find(item=>item.name==='Business').categories.includes('Client work')"),'Task capture can persist a subcategory under the selected category');
+run(`document.querySelector('#newTaskSubcategoryName').value='client WORK';addTaskSubcategoryFromCapture()`);
+assert.equal(read("state.taxonomy.find(item=>item.name==='Business').categories.filter(item=>item.toLowerCase()==='client work').length"),1,'Capture prevents duplicate subcategories regardless of capitalization');
+
+reset();
 run(`state.requests=[
 {id:1,name:'Pending Person',purpose:'Pending fixture',status:'pending',date:iso(),start:'10:00',duration:30},
 {id:2,name:'Approved Person',purpose:'Approved fixture',status:'approved',date:iso(),start:'11:00',duration:30},
@@ -133,7 +141,7 @@ const manifest=JSON.parse(await readFile(new URL('../client/manifest.webmanifest
 assert.equal(manifest.share_target.action,'/?share-target=1','Installed app can receive shared links');
 const serviceWorker=await readFile(new URL('../client/sw.js',import.meta.url),'utf8');
 assert.match(serviceWorker,/periodicsync/,'Supporting installed browsers can check reminders in the background');
-assert.match(serviceWorker,/life-command-static-v15/,'A new cache generation ships account-safe app assets');
+assert.match(serviceWorker,/life-command-static-v16/,'A new cache generation ships account-safe app assets');
 assert.match(serviceWorker,/freshAsset/,'JavaScript and CSS check the network before using stale cache');
 const page=await readFile(new URL('../client/index.html',import.meta.url),'utf8');
 const stylesheet=await readFile(new URL('../client/styles.css',import.meta.url),'utf8');
@@ -141,6 +149,10 @@ assert.match(page,/id="mobileMore"/,'Mobile navigation keeps every section reach
 assert.match(page,/data-task-plan-show="window"/,'Task capture progressively reveals flexible-window fields');
 assert.match(page,/data-task-plan-choice="fixed"/,'Task capture provides a direct modern planning choice');
 assert.match(page,/class="capture-more-options"/,'Optional capture settings stay available without crowding the main flow');
+assert.match(page,/id="showTaskCategoryCreator"/,'Task capture can create a category without leaving the form');
+assert.match(page,/id="showTaskSubcategoryCreator"/,'Task capture can create a subcategory without leaving the form');
+assert.match(source,/function addTaskCategoryFromCapture\(\)/,'New task categories are persisted from capture');
+assert.match(source,/function addTaskSubcategoryFromCapture\(\)/,'New task subcategories are persisted from capture');
 assert.match(source,/data-edit-task="\$\{item\.id\}"/,'Assigned planner blocks expose task editing');
 assert.match(source,/const editTask=event\.target\.closest\('\[data-edit-task\]'/,'Task editing is handled consistently across views');
 assert.match(page,/id="toastAction"/,'Destructive actions can offer an inline recovery action');
