@@ -5,3 +5,8 @@ node_modules/
 outputs/
 .sites-runtime/
 .wrangler/
+.env
+.env.*
+!.env.example
+*.tar.gz
+.DS_Store

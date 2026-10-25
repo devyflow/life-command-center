@@ -153,7 +153,7 @@ const manifest=JSON.parse(await readFile(new URL('../client/manifest.webmanifest
 assert.equal(manifest.share_target.action,'/?share-target=1','Installed app can receive shared links');
 const serviceWorker=await readFile(new URL('../client/sw.js',import.meta.url),'utf8');
 assert.match(serviceWorker,/periodicsync/,'Supporting installed browsers can check reminders in the background');
-assert.match(serviceWorker,/life-command-static-v18/,'A new cache generation ships account-safe app assets');
+assert.match(serviceWorker,/life-command-static-v19/,'A new cache generation ships account-safe app assets');
 assert.match(serviceWorker,/freshAsset/,'JavaScript and CSS check the network before using stale cache');
 const page=await readFile(new URL('../client/index.html',import.meta.url),'utf8');
 const stylesheet=await readFile(new URL('../client/styles.css',import.meta.url),'utf8');
@@ -168,6 +168,14 @@ assert.match(page,/id="taskWeek"/,'Task capture can highlight a task for this we
 run(`state.tasks[0].paperMarks={...(state.tasks[0].paperMarks||{}),week:true};ui.taskFilter='week';`);
 assert.equal(read(`matchesTaskFilter(state.tasks[0])`),true,'This week filter includes weekly highlighted tasks');
 assert.match(run('taskFilterBar()'),/◆ This week/,'Weekly priorities have a dedicated task filter');
+reset();
+const quickTask=read(`createQuickTask('A title-only capture')`);
+assert.equal(quickTask.title,'A title-only capture','Quick capture creates the intended task');
+assert.equal(quickTask.plan,'inbox','Quick capture safely lands in Inbox');
+run(`state.tasks[0].paperMarks.week=true;state.tasks[0].date=iso(addDays(2));state.tasks[0].next='';ui.taskFilter='review';`);
+assert.equal(read(`matchesTaskFilter(state.tasks[0])`),true,'Review filter finds tasks without a clear next action');
+assert.match(run('todayView()'),/YOUR DAILY PATH/,'Today shows the complete daily workflow');
+assert.match(run('todayView()'),/Choose for today/,'Weekly priorities can move into Today directly');
 assert.match(source,/data-progress-lock="\$\{task\.id\}"/,'Every task card has its own progress lock');
 assert.match(source,/class="completion-record"/,'Completed tasks show their completion record and recovery control');
 assert.match(stylesheet,/\.task-capture-form\{min-height:0;overflow-y:auto/,'The add and edit task form owns a reliable scroll area');

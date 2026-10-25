@@ -1,5 +1,6 @@
 {
   "name": "life-command-center",
+  "version": "0.9.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,6 +9,8 @@
     "build:vercel": "node scripts/build-vercel.mjs",
     "validate:vercel": "node scripts/validate-vercel.mjs",
     "test:experience": "node scripts/test-experience.mjs",
+    "test": "npm run validate && npm run validate:vercel && npm run test:experience",
+    "check": "npm test && npm run build:vercel",
     "preview:qa": "node scripts/preview-experience.mjs"
   },
   "devDependencies": {

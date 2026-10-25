@@ -333,6 +333,7 @@ function matchesTaskFilter(task) {
   if (filter === 'circle') return hasMark(task, 'circle');
   if (filter === 'tick') return hasMark(task, 'tick');
   if (filter === 'week') return hasMark(task, 'week');
+  if (filter === 'review') return task.progress < 100 && (task.postponed >= 2 || !String(task.next || '').trim());
   if (filter === 'not-circle') return !hasMark(task, 'circle');
   if (filter === 'not-tick') return !hasMark(task, 'tick');
   if (filter === 'completed') return task.progress >= 100;
@@ -341,7 +342,7 @@ function matchesTaskFilter(task) {
 }
 function taskFilterBar() {
   const completed=state.tasks.filter(task=>task.progress>=100).length;
-  const filters = [['open','Open'],['all','Everything'],['week','◆ This week'],['circle','◯ Important'],['tick','✓ Ready'],['not-circle','Not circled'],['not-tick','Not ticked'],['completed',`Completed history${completed?` (${completed})`:''}`],['under-5','Under 5%']];
+  const filters = [['open','Open'],['all','Everything'],['week','◆ This week'],['review','Needs review'],['circle','◯ Important'],['tick','✓ Ready'],['not-circle','Not circled'],['not-tick','Not ticked'],['completed',`Completed history${completed?` (${completed})`:''}`],['under-5','Under 5%']];
   return `<div class="task-filter-bar" aria-label="Task filters">${filters.map(([key,label])=>`<button class="filter-chip ${ui.taskFilter===key?'active':''}" data-task-filter="${key}">${label}</button>`).join('')}</div>`;
 }
 function taskMarkButtons(task, paper = false) {
@@ -458,6 +459,12 @@ function compactTask(task, mode = 'normal') {
   const action = mode === 'risk' ? `<button data-rescue-open="${task.id}">Resolve</button>` : mode === 'flex' ? `<button data-place-task="${task.id}">Place it</button>` : `<button data-start-now="${task.id}">Start</button>`;
   return `<div class="compact-task"><i class="state-edge ${mode}"></i><div><b>${esc(task.title)}</b><small>${meta} · ${esc(task.area)} / ${esc(task.category)}</small></div><div class="compact-task-actions"><button class="compact-edit" data-edit-task="${task.id}" aria-label="Edit ${esc(task.title)}">Edit</button>${action}</div></div>`;
 }
+function createQuickTask(title) {
+  const clean=String(title||'').trim();if(!clean)return null;
+  const area=state.taxonomy[0]||DEFAULT_TAXONOMY[0],category=area.categories[0]||'General';
+  const task={id:uid(),title:clean,area:area.name,category,duration:30,energy:'medium',date:null,start:null,plan:'inbox',progress:0,next:'',timer:true,publish:false,calendar:false,repeat:'none',postponed:0,progressLocked:true,completionHistory:[],paperMarks:{circle:false,tick:false,box:false,star:false,week:false},createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
+  state.tasks.unshift(task);save();return task;
+}
 function todayView() {
   const tasks = state.tasks.filter(t => t.date === iso() && t.plan !== 'inbox' && t.progress < 100);
   const scheduled = tasks.filter(t => t.start).sort((a,b)=>mins(a.start)-mins(b.start));
@@ -468,13 +475,18 @@ function todayView() {
   const next = scheduled.filter(t=>t.id!==nowTask?.id).slice(0,3);
   const remaining = Math.round(tasks.reduce((n,t)=>n+t.duration*(1-t.progress/100),0));
   const momentum = momentumStatus();
+  const weekTasks=state.tasks.filter(t=>t.progress<100&&hasMark(t,'week'));
+  const weekWaiting=weekTasks.filter(t=>t.date!==iso()).slice(0,5);
+  const needsReview=state.tasks.filter(t=>t.progress<100&&(t.postponed>=2||!String(t.next||'').trim())).length;
   return `${pageHead(new Date().toLocaleDateString('en-US',{weekday:'long',day:'numeric',month:'long'}).toUpperCase(), `Today, clearly.<br><em>Nothing out of sight.</em>`, `<button class="secondary" data-view="all">All open tasks</button><button class="primary" data-open="taskModal">+ Capture</button>`)}
+    <section class="daily-path" aria-label="Daily workflow"><div class="daily-path-copy"><small>YOUR DAILY PATH</small><b>Capture → This week → Today → Work now → Review</b></div><form id="quickCaptureForm" class="quick-capture"><input id="quickCaptureTitle" aria-label="Quick capture task title" placeholder="Type a task and release it from your mind…" autocomplete="off"><button type="submit">Capture</button></form><div class="daily-path-steps"><button data-open="taskModal"><i>1</i><span>Capture</span></button><button data-week-review><i>2</i><span>This week <b>${weekTasks.length}</b></span></button><button data-view="today"><i>3</i><span>Today <b>${tasks.length}</b></span></button>${nowTask?`<button data-start-now="${nowTask.id}"><i>4</i><span>Work now</span></button>`:'<button disabled><i>4</i><span>Work now</span></button>'}<button data-review-week><i>5</i><span>Review <b>${needsReview}</b></span></button></div></section>
     <section class="metric-row"><article class="metric"><small>OPEN TODAY</small><strong>${tasks.length}</strong><span>${unscheduled.length} still need a time</span></article><article class="metric"><small>REMAINING LOAD</small><strong>${duration(remaining)}</strong><span>${remaining>300?'Protect your focus blocks':'Achievable with breathing room'}</span></article><article class="metric"><small>PRODUCTIVE RHYTHM</small><strong>${state.profile.streak} days</strong><span>Rest never resets this</span></article><article class="metric accent"><small>MOMENTUM</small><strong>${state.profile.xp} XP</strong><span>${momentum.current.symbol} ${momentum.current.name}</span></article></section>
     <div class="today-flow">
       ${nowTask ? `<article class="now-card"><div><p class="eyebrow">NOW · RECOMMENDED NEXT ACTION</p><h2>${esc(nowTask.title)}</h2><p>${duration(Math.round(nowTask.duration*(1-nowTask.progress/100)))} remaining · ${nowTask.energy} energy · ${nowTask.progress}% complete</p><p class="next-action">Next: ${esc(nowTask.next||'Define the first physical action')}</p></div><div class="now-actions"><button class="defer" data-edit-task="${nowTask.id}">Edit task</button><button class="defer" data-rescue-open="${nowTask.id}">Not now</button><button class="start-now" data-start-now="${nowTask.id}">▶ Start focus</button></div></article>` : `<div class="empty"><b>Nothing is demanding your attention.</b>Enjoy the open space or capture what matters.</div>`}
       <div class="today-columns"><section class="attention-section"><div class="section-title"><div><h2>Next</h2><p>The next visible commitments, in order.</p></div><button class="ghost-btn" data-view="planner">Timeline →</button></div>${next.length?next.map(t=>compactTask(t)).join(''):'<div class="empty"><b>No next commitment.</b>Your schedule has room.</div>'}<div class="mini-timeline">${[8,11,14,17,20,22].map(h=>`<div class="mini-hour"><span>${h>12?h-12:h}${h>=12?'p':'a'}</span><i class="${scheduled.some(t=>mins(t.start)>=h*60&&mins(t.start)<(h+3)*60)?'busy':'open'}"></i></div>`).join('')}</div></section>
       <section class="attention-section danger"><div class="section-title"><div><h2>At risk</h2><p>These can be missed unless you decide.</p></div></div>${risk.length?risk.map(t=>compactTask(t,'risk')).join(''):'<div class="empty"><b>Nothing at risk.</b>Your commitments are covered.</div>'}</section></div>
       <section class="attention-section flexible"><div class="section-title"><div><h2>Unscheduled today</h2><p>Belongs today, but has no hour. These never disappear into a list.</p></div><button class="ghost-btn" data-view="planner">Place on timeline →</button></div>${unscheduled.length?unscheduled.map(t=>compactTask(t,'flex')).join(''):'<div class="empty"><b>Every task has a home.</b>No floating commitments today.</div>'}</section>
+      <section class="weekly-review"><div class="section-title"><div><p class="eyebrow">◆ THIS WEEK</p><h2>Choose what deserves today.</h2><p>${weekTasks.length} weekly priorit${weekTasks.length===1?'y':'ies'} · ${needsReview} open task${needsReview===1?'':'s'} need clarification or recovery</p></div><button class="ghost-btn" data-week-review>Open weekly view →</button></div><div class="weekly-queue">${weekWaiting.length?weekWaiting.map(task=>`<article><div><b>${esc(task.title)}</b><small>${esc(task.area)} / ${esc(task.category)} · ${task.progress}% complete</small></div><button data-edit-task="${task.id}">Edit</button><button class="weekly-today" data-today-pick="${task.id}">Choose for today</button></article>`).join(''):'<div class="empty"><b>No weekly task is waiting outside Today.</b>Mark any task with ◆ when it deserves attention this week.</div>'}</div></section>
     </div>`;
 }
 
@@ -526,6 +538,7 @@ function allView() {
   return `${pageHead('THE GUARANTEED ESCAPE HATCH', `Every task.<br><em>No hidden corners.</em>`, `<button class="primary" data-open="taskModal">+ Capture</button>`)}
     <div class="all-toolbar"><input id="allSearch" value="${esc(ui.allQuery||'')}" placeholder="Filter every task by title, area, category or next action…"><span class="all-summary">${open.length} visible · ${state.tasks.filter(t=>t.progress>=100).length} completed</span></div>
     ${taskFilterBar()}
+    <details class="signal-guide"><summary>What the task signals mean</summary><div><span><b>◯ Important</b> Costly to ignore</span><span><b>◆ This week</b> Needs attention this week</span><span><b>★ Today focus</b> Deliberately chosen today</span><span><b>✓ Ready</b> Next action is known</span><span><b>□ Protected</b> Defend its scheduled time</span></div></details>
     <div class="status-legend"><span><i style="background:var(--coral)"></i>At risk</span><span><i style="background:var(--violet)"></i>Flexible or undecided</span><span><i style="background:var(--lime)"></i>Ready to act</span><span><i style="background:#a4a8a4"></i>Inbox</span></div>
     ${groups.map(area=>{const items=open.filter(t=>t.area===area);return `<section class="all-group"><div class="all-group-head"><h2><span class="mini-dot" style="background:${color(area)}"></span> ${area}</h2><span>${items.length} visible</span></div><div class="task-list">${items.length?items.map(taskCard).join(''):'<div class="empty"><b>No matching tasks.</b>This area is clear.</div>'}</div></section>`}).join('')}`;
 }
@@ -692,6 +705,7 @@ function insightsView() {
 function render() {
   const renderers = { today: todayView, planner: plannerView, inbox: inboxView, paper: paperView, board: boardView, library: libraryView, all: allView, requests: requestsView, share: shareView, insights: insightsView };
   $('#app').innerHTML = attentionRail() + glanceRail() + (renderers[ui.view] || todayView)();
+  $('#quickCaptureForm')?.addEventListener('submit',event=>{event.preventDefault();const input=$('#quickCaptureTitle'),task=createQuickTask(input?.value);if(!task)return;reward(5,'A thought became a trusted capture');toast('Captured in Inbox','Add details only when the task needs them.');render();});
   renderLifeTree();
   $$('.nav-item,.mobile-nav button[data-view]').forEach(b => { const active=b.dataset.view===ui.view;b.classList.toggle('active',active);if(active)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current'); });
   const todayOpen = state.tasks.filter(t => t.date === iso() && t.progress < 100).length;
@@ -1093,6 +1107,9 @@ function initPaperBoard() {
 document.addEventListener('click', event => {
   const sourceUse=event.target.closest('[data-source-use]');if(sourceUse){applySourceSuggestion(sourceUse.dataset.sourceUse);return;}
   const scanRegion=event.target.closest('[data-scan-region]');if(scanRegion){const item=scanRuntime.candidates.find(entry=>entry.id===Number(scanRegion.dataset.scanRegion));if(item){item.included=!item.included;renderScanCandidates();}return;}
+  if(event.target.closest('[data-week-review]')){ui.taskFilter='week';setView('all');return;}
+  if(event.target.closest('[data-review-week]')){ui.taskFilter='review';setView('all');return;}
+  const todayPick=event.target.closest('[data-today-pick]');if(todayPick){const task=state.tasks.find(item=>item.id===Number(todayPick.dataset.todayPick));if(task){task.date=iso();task.plan='today';task.start=null;task.paperMarks||={circle:false,tick:false,box:false,star:false,week:false};task.paperMarks.star=true;task.updatedAt=new Date().toISOString();save();render();toast('Chosen for today','It is now visible in Today and ready to place on the hour planner.');}return;}
   const view = event.target.closest('[data-view]'); if (view) { event.preventDefault(); setView(view.dataset.view); return; }
   const canvasLock=event.target.closest('[data-canvas-lock]');if(canvasLock){setCanvasLock(canvasLock.dataset.canvasLock);return;}
   const canvasZoom=event.target.closest('[data-canvas-zoom]');if(canvasZoom){const [kind,action]=canvasZoom.dataset.canvasZoom.split(':');setCanvasZoom(kind,action);return;}
@@ -1133,7 +1150,7 @@ document.addEventListener('click', event => {
   const searchTask = event.target.closest('[data-search-task]'); if(searchTask){const task=state.tasks.find(t=>t.id===Number(searchTask.dataset.searchTask));ui.allQuery=task?.title||'';closeModal('searchModal');setView('all');return;}
   const searchBoard=event.target.closest('[data-search-board]');if(searchBoard){const note=state.boardNotes.find(item=>item.id===Number(searchBoard.dataset.searchBoard));if(note)ui.boardId=note.boardId;closeModal('searchModal');setView('board');return;}
   const searchLibrary=event.target.closest('[data-search-library]');if(searchLibrary){const item=state.library.find(entry=>entry.id===Number(searchLibrary.dataset.searchLibrary));ui.libraryQuery=item?.title||'';ui.libraryFilter='all';closeModal('searchModal');setView('library');return;}
-  const taskMark=event.target.closest('[data-task-mark]');if(taskMark){const task=state.tasks.find(t=>t.id===Number(taskMark.dataset.taskMarkId));if(task){task.paperMarks||={circle:false,tick:false,box:false,star:false};const mark=taskMark.dataset.taskMark;task.paperMarks[mark]=!task.paperMarks[mark];save();render();toast(task.paperMarks[mark]?`${taskMark.title} marked`:`${taskMark.title} removed`,'The mark changed on both Paper and Tasks.');}return;}
+  const taskMark=event.target.closest('[data-task-mark]');if(taskMark){const task=state.tasks.find(t=>t.id===Number(taskMark.dataset.taskMarkId));if(task){task.paperMarks||={circle:false,tick:false,box:false,star:false,week:false};const mark=taskMark.dataset.taskMark;task.paperMarks[mark]=!task.paperMarks[mark];save();render();toast(task.paperMarks[mark]?`${taskMark.title} marked`:`${taskMark.title} removed`,'The mark changed on both Paper and Tasks.');}return;}
   const progressLock=event.target.closest('[data-progress-lock]');if(progressLock){const task=state.tasks.find(item=>item.id===Number(progressLock.dataset.progressLock));if(task){task.progressLocked=task.progressLocked===false;save();render();toast(task.progressLocked?'Progress locked':'Progress unlocked',task.progressLocked?'The slider cannot move accidentally.':'Make one adjustment; it will lock again automatically.');}return;}
   const restoreTask=event.target.closest('[data-restore-task]');if(restoreTask){const task=state.tasks.find(item=>item.id===Number(restoreTask.dataset.restoreTask));if(task)requestTaskRestoration(task);return;}
   const paperEdit=event.target.closest('[data-paper-edit]');if(paperEdit){const task=state.tasks.find(t=>t.id===Number(paperEdit.dataset.paperEdit));if(task)openTaskEditor(task);return;}
