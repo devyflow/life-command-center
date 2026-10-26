@@ -6,9 +6,10 @@
 ![Version](https://img.shields.io/badge/version-0.9.0-blue)
 ![Status](https://img.shields.io/badge/status-V1%20release%20candidate-f5c95b)
 ![PWA](https://img.shields.io/badge/PWA-installable-9cbe52)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
 
 **Live prototype:** [dvlife.vercel.app](https://dvlife.vercel.app/)
-**Current release stage:** Private V1 release candidate
+**Current release stage:** Public V1 release candidate
 
 Life Command Center combines fast capture, daily execution, hourly planning and flexible visual thinking in one synchronized workspace. It is designed for people whose personal and professional commitments are scattered across notes, calendars, screenshots, chats and memory.
 
@@ -247,7 +248,9 @@ The complete checklist is in [docs/V1_RELEASE_CHECKLIST.md](docs/V1_RELEASE_CHEC
 
 ## License
 
-This repository is currently private and no open-source license has been applied. All rights remain reserved while the product and commercial model are finalized.
+Copyright © 2026 devyflow contributors.
 
-If the project is intentionally opened later, the license decision must be made before changing repository visibility.
+Life Command Center is licensed under the [GNU Affero General Public License v3.0](LICENSE). You may use, study, modify and redistribute the code under that license. If you run a modified version as a network service, you must make its corresponding source available to the people using it under the same license.
+
+The license covers the source code. It does not grant rights to the Life Command Center name, logo or other project branding.
 

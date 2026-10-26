@@ -29,7 +29,7 @@
 
 ## Release
 
-- [ ] Choose and add the intended software license before making the repository public.
+- [x] Publish the source under GNU AGPL v3 before opening the repository.
 - [ ] Update `package.json` from `0.9.0` to `1.0.0`.
 - [ ] Move the Unreleased changelog items into a `1.0.0` section.
 - [ ] Create and push the signed tag `v1.0.0`.
