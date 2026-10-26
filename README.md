@@ -7,7 +7,7 @@
 ![Status](https://img.shields.io/badge/status-V1%20release%20candidate-f5c95b)
 ![PWA](https://img.shields.io/badge/PWA-installable-9cbe52)
 
-**Live prototype:** [lcc-d.vercel.app](https://lcc-d.vercel.app/)
+**Live prototype:** [dvlife.vercel.app](https://dvlife.vercel.app/)
 **Current release stage:** Private V1 release candidate
 
 Life Command Center combines fast capture, daily execution, hourly planning and flexible visual thinking in one synchronized workspace. It is designed for people whose personal and professional commitments are scattered across notes, calendars, screenshots, chats and memory.
