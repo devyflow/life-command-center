@@ -14,7 +14,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&family=Newsreader:ital,opsz,wght@1,6..72,500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=workspace-v14">
+  <link rel="stylesheet" href="styles.css?v=workspace-v15">
 </head>
 <body>
   <div class="grain" aria-hidden="true"></div>
@@ -57,9 +57,21 @@
   <main>
     <header class="topbar">
       <button class="menu-btn" id="menuBtn" aria-label="Open menu" aria-controls="sidebar" aria-expanded="false">☰</button>
-      <div class="command-tools"><button class="capture-trigger" id="captureTrigger"><span>+</span><b>Capture anything…</b><kbd>C</kbd></button><button class="search-trigger" id="searchTrigger"><span>⌕</span><b>Find anything</b><kbd>/</kbd></button></div>
+      <div class="command-tools"><button class="capture-trigger" id="captureTrigger"><span>+</span><b>Capture anything…</b><kbd>C</kbd></button><button class="nav-trigger" id="navigationTrigger" aria-controls="navigationMenu" aria-expanded="false"><span>⌘</span><b>Go to</b></button><button class="search-trigger" id="searchTrigger"><span>⌕</span><b>Find anything</b><kbd>/</kbd></button></div>
       <div class="top-actions"><button class="scene-btn active" id="sceneBtn" title="Toggle spatial effects">◉ <span>3D</span></button><button class="focus-btn" id="focusBtn" title="Enter focus mode">◎ <span>Focus</span></button><div class="today-date"><strong id="dateDay">17</strong><span id="dateMonth">OCT</span></div></div>
     </header>
+    <aside class="navigation-menu" id="navigationMenu" aria-label="Quick navigation" aria-hidden="true">
+      <header><div><small>GO ANYWHERE</small><b>Your whole workspace</b></div><button type="button" id="navigationClose" aria-label="Close navigation">×</button></header>
+      <div class="navigation-menu-grid">
+        <button data-view="today"><span>⌁</span><b>Today</b><small>What needs attention now</small></button>
+        <button data-view="planner"><span>▦</span><b>Hour planner</b><small>Place work on your day</small></button>
+        <button data-view="all"><span>☷</span><b>All tasks</b><small>Search, filter and review</small></button>
+        <button data-view="paper"><span>✎</span><b>Paper page</b><small>See and arrange everything</small></button>
+        <button data-view="board"><span>▤</span><b>Bulletin board</b><small>Keep thoughts in sight</small></button>
+        <button data-view="library"><span>⌘</span><b>Useful library</b><small>Turn saved things into action</small></button>
+      </div>
+      <footer><button type="button" data-open="taskModal">+ Capture a task</button><button type="button" id="navigationSearch">⌕ Find anything</button></footer>
+    </aside>
     <div id="app" class="app-shell" aria-live="polite"></div>
   </main>
 
@@ -81,6 +93,11 @@
     <div class="modal task-modal task-capture-modal" role="dialog" aria-modal="true" aria-labelledby="taskModalTitle">
       <header class="modal-head task-modal-head"><div class="task-modal-heading"><span class="capture-orb" aria-hidden="true">+</span><div><p class="eyebrow" id="taskModalEyebrow">NEW TASK</p><h2 id="taskModalTitle">Capture what matters.</h2><p id="taskModalSubtitle">Start with the task. Add structure only where it helps.</p></div></div><button data-close="taskModal" aria-label="Close task menu">×</button></header>
       <form id="taskForm" class="task-capture-form">
+        <section class="task-preset-bar" aria-label="Task presets">
+          <div><span>PRESETS</span><b>Reuse a task setup</b><small>Apply category, timing, duration, signals and focus options in one tap.</small></div>
+          <div class="task-preset-controls"><select id="taskPresetSelect" aria-label="Choose a task preset"><option value="">Choose a preset…</option></select><button class="secondary" id="taskPresetApply" type="button">Apply</button><button class="secondary" id="taskPresetDelete" type="button" disabled>Delete</button></div>
+          <div class="task-preset-save"><input id="taskPresetName" maxlength="40" placeholder="Preset name, e.g. DSA practice"><button id="taskPresetSave" type="button">Save current setup</button></div>
+        </section>
         <section class="capture-title-card">
           <label class="title-field"><span>What do you want to move forward?</span><textarea id="taskTitle" rows="2" required placeholder="Prepare DSA practice set"></textarea></label>
           <small>Use a clear action, such as “Draft the introduction” or “Book the appointment”.</small>
@@ -270,7 +287,7 @@
   <div class="modal-layer" id="boardModal" aria-hidden="true">
     <div class="modal small-modal" role="dialog" aria-modal="true" aria-labelledby="boardTitle">
       <header class="modal-head"><div><p class="eyebrow">NEW VISUAL SPACE</p><h2 id="boardTitle">Create a board.</h2></div><button data-close="boardModal">×</button></header>
-      <form id="boardForm" class="stack-form"><label>Board name<input id="boardName" maxlength="50" required placeholder="Ideas worth returning to"></label><label>Surface<select id="boardTheme"><option value="cork">Warm cork</option><option value="linen">Calm linen</option><option value="slate">Dark slate</option></select></label><button class="primary" type="submit">Create board →</button></form>
+      <form id="boardForm" class="stack-form"><label>Board name<input id="boardName" maxlength="50" required placeholder="Ideas worth returning to"></label><label>Surface<select id="boardTheme"><option value="cork">Warm cork</option><option value="linen">Calm linen</option><option value="slate">Dark slate</option></select></label><button class="primary" id="boardSubmit" type="submit">Create board →</button></form>
     </div>
   </div>
 
@@ -296,7 +313,7 @@
   <aside class="update-nudge" id="updateNudge" aria-live="polite" hidden><span>↻</span><div><b>A fresher version is ready</b><small>Restart to load interface improvements. Your saved work is safe.</small></div><button id="applyUpdate" type="button">Restart</button><button id="dismissUpdate" class="bare" type="button" aria-label="Dismiss update">×</button></aside>
   <div class="toast" id="toast" role="status" aria-live="polite"><span>✓</span><div><b id="toastTitle">Saved</b><small id="toastText">Your change is ready.</small></div><button id="toastAction" type="button" hidden>Undo</button></div>
   <div class="xp-burst" id="xpBurst"><span>✦</span><b id="xpBurstValue">+10 XP</b><small id="xpBurstText">Momentum earned</small></div>
-  <script src="app.js?v=workspace-v14"></script>
+  <script src="app.js?v=workspace-v15"></script>
   <script type="module" src="scene.js?v=workspace-v7"></script>
 </body>
 </html>
