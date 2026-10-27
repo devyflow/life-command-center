@@ -138,6 +138,9 @@ assert.match(run('boardView()'),/data-canvas-lock="board"/,'Bulletin exposes a c
 assert.match(run('boardView()'),/data-canvas-zoom="board:fit"/,'Bulletin can fit the whole board to a phone');
 assert.match(run('boardView()'),/id="bulletinStage"/,'Bulletin uses a scaled stage without changing note positions');
 run(`ui.boardMenuId=1`);assert.match(run('boardView()'),/menu-open/,'Selected Bulletin controls stay open');
+assert.match(run('boardView()'),/data-board-edit="workstation"/,'The active board exposes a rename and surface editor');
+assert.match(run('boardView()'),/data-board-note-font="1:up"/,'Bulletin notes expose text-size controls');
+assert.match(run('boardView()'),/data-board-note-nudge="1:12:0"/,'Bulletin notes expose precise movement controls');
 run(`ui.libraryFilter='active';ui.libraryQuery='presentations'`);
 assert.equal(read(`state.library.filter(libraryMatches).length`),1,'Library search finds an item by its use context');
 run(`state.tasks=[{id:7,title:'Prepare design presentation',next:'Build a visual diagram',area:'Career',category:'Projects',progress:0}];state.library=[{id:8,title:'Visual presentation design toolkit',context:'presentations and teaching',tags:['design','diagram'],status:'ready',minutes:30}];ui.libraryQuery='';`);
@@ -153,7 +156,7 @@ const manifest=JSON.parse(await readFile(new URL('../client/manifest.webmanifest
 assert.equal(manifest.share_target.action,'/?share-target=1','Installed app can receive shared links');
 const serviceWorker=await readFile(new URL('../client/sw.js',import.meta.url),'utf8');
 assert.match(serviceWorker,/periodicsync/,'Supporting installed browsers can check reminders in the background');
-assert.match(serviceWorker,/life-command-static-v20/,'A new cache generation ships account-safe app assets');
+assert.match(serviceWorker,/life-command-static-v21/,'A new cache generation ships account-safe app assets');
 assert.match(serviceWorker,/freshAsset/,'JavaScript and CSS check the network before using stale cache');
 const page=await readFile(new URL('../client/index.html',import.meta.url),'utf8');
 const stylesheet=await readFile(new URL('../client/styles.css',import.meta.url),'utf8');
@@ -166,6 +169,15 @@ assert.match(page,/id="showTaskCategoryCreator"/,'Task capture can create a cate
 assert.match(page,/id="showTaskSubcategoryCreator"/,'Task capture can create a subcategory without leaving the form');
 assert.match(page,/id="completionModal"/,'Task completion uses a deliberate confirmation dialog');
 assert.match(page,/id="taskWeek"/,'Task capture can highlight a task for this week');
+assert.match(page,/id="taskPresetSelect"/,'Task capture exposes reusable presets');
+assert.match(page,/id="navigationMenu"/,'A quick navigation menu keeps major workspaces within one interaction');
+assert.match(source,/function saveTaskPreset\(\)/,'Task presets can persist the current capture setup');
+assert.match(source,/function applyTaskPreset\(id\)/,'Saved task presets can refill the capture form');
+assert.match(source,/data-paper-object-menu="task:/,'Paper tasks expose a persistent layout menu');
+assert.match(source,/data-paper-font="task:/,'Paper tasks expose text-size controls');
+assert.match(source,/data-paper-nudge="task:/,'Paper tasks expose precise movement controls');
+run(`state.taskPresets=[{id:'study',name:'Study block',area:'Career',category:'College',duration:90,energy:'high',plan:'today',timer:true,paperMarks:{week:true}}];normalizeStateShape();`);
+assert.deepEqual(read(`({name:state.taskPresets[0].name,duration:state.taskPresets[0].duration,week:state.taskPresets[0].paperMarks.week})`),{name:'Study block',duration:90,week:true},'Saved task presets survive state normalization');
 run(`state.tasks[0].paperMarks={...(state.tasks[0].paperMarks||{}),week:true};ui.taskFilter='week';`);
 assert.equal(read(`matchesTaskFilter(state.tasks[0])`),true,'This week filter includes weekly highlighted tasks');
 assert.match(run('taskFilterBar()'),/◆ This week/,'Weekly priorities have a dedicated task filter');
