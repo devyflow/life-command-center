@@ -156,7 +156,9 @@ const manifest=JSON.parse(await readFile(new URL('../client/manifest.webmanifest
 assert.equal(manifest.share_target.action,'/?share-target=1','Installed app can receive shared links');
 const serviceWorker=await readFile(new URL('../client/sw.js',import.meta.url),'utf8');
 assert.match(serviceWorker,/periodicsync/,'Supporting installed browsers can check reminders in the background');
-assert.match(serviceWorker,/life-command-static-v21/,'A new cache generation ships account-safe app assets');
+assert.match(serviceWorker,/life-command-static-v22/,'A new cache generation ships account-safe app assets');
+assert.match(serviceWorker,/notificationAction=complete/,'Task notifications can return to a deliberate completion review');
+assert.match(serviceWorker,/Snooze 10 min/,'Task notifications expose a snooze action');
 assert.match(serviceWorker,/freshAsset/,'JavaScript and CSS check the network before using stale cache');
 const page=await readFile(new URL('../client/index.html',import.meta.url),'utf8');
 const stylesheet=await readFile(new URL('../client/styles.css',import.meta.url),'utf8');
@@ -171,8 +173,15 @@ assert.match(page,/id="completionModal"/,'Task completion uses a deliberate conf
 assert.match(page,/id="taskWeek"/,'Task capture can highlight a task for this week');
 assert.match(page,/id="taskPresetSelect"/,'Task capture exposes reusable presets');
 assert.match(page,/id="navigationMenu"/,'A quick navigation menu keeps major workspaces within one interaction');
+assert.match(page,/id="taskReminderPopup"/,'Scheduled tasks have an in-app reminder fallback');
+assert.match(page,/id="testReminder"/,'People can verify reminder delivery on their current device');
+assert.match(page,/id="timerComplete"/,'The focus timer can complete its active task');
 assert.match(source,/function saveTaskPreset\(\)/,'Task presets can persist the current capture setup');
 assert.match(source,/function applyTaskPreset\(id\)/,'Saved task presets can refill the capture form');
+assert.match(source,/function taskDoneButton\(task/,'All task surfaces share a completion control');
+assert.match(source,/data-complete-task="\$\{task\.id\}"/,'Compact task appearances expose completion');
+assert.match(source,/function showTaskReminderPopup\(task,minutes\)/,'Task reminders can appear while the website is open');
+assert.match(source,/async function sendTestReminder\(\)/,'Native notification delivery can be tested immediately');
 assert.match(source,/data-paper-object-menu="task:/,'Paper tasks expose a persistent layout menu');
 assert.match(source,/data-paper-font="task:/,'Paper tasks expose text-size controls');
 assert.match(source,/data-paper-nudge="task:/,'Paper tasks expose precise movement controls');
